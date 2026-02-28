@@ -138,12 +138,11 @@ mod tests {
     #[test]
     fn test_json_error_conversion() {
         // serde_json::Error is automatically converted
-        let json_err = serde_json::Error::syntax(
-            serde_json::error::ErrorCode::ExpectedColon,
-            0,
-            0,
-        );
-        let parse_err = ParseError::from(json_err);
-        assert!(matches!(parse_err, ParseError::JsonError(_)));
+        // Use serde_json to parse invalid JSON to create an error
+        let json_err: Result<serde_json::Value, serde_json::Error> = serde_json::from_str("invalid json");
+        if let Err(json_err) = json_err {
+            let parse_err = ParseError::from(json_err);
+            assert!(matches!(parse_err, ParseError::JsonError(_)));
+        }
     }
 }
