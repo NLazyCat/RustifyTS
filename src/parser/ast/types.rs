@@ -10,7 +10,7 @@ use std::fmt;
 ///
 /// Represents all possible TypeScript AST node types, categorized
 /// by their syntactic role in the language.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum NodeKind {
     // --- Statements ---
     /// Block statement: { stmt1; stmt2; }
@@ -444,7 +444,7 @@ impl fmt::Display for AssignmentOperator {
 }
 
 /// Literal values
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Literal {
     /// String literal
     String(String),
@@ -501,7 +501,7 @@ impl From<u32> for NodeId {
 }
 
 /// Function parameter
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Parameter {
     pub name: String,
     pub type_annotation: Option<TypeAnnotation>,
@@ -510,7 +510,7 @@ pub struct Parameter {
 }
 
 /// Variable declaration
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct VariableDeclaration {
     pub name: String,
     pub kind: VariableKind,
@@ -529,8 +529,16 @@ pub enum VariableKind {
     Var,
 }
 
+/// Type parameter declaration
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct TypeParameter {
+    pub name: String,
+    pub constraint: Option<TypeAnnotation>,
+    pub default: Option<TypeAnnotation>,
+}
+
 /// Type annotation
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum TypeAnnotation {
     /// Simple type reference
     TypeReference {
@@ -551,7 +559,7 @@ pub enum TypeAnnotation {
 }
 
 /// Array element (can be expression or spread)
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum ArrayElement {
     /// Regular element
     Element(NodeId),
@@ -560,7 +568,7 @@ pub enum ArrayElement {
 }
 
 /// Object property
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ObjectProperty {
     pub key: PropertyKey,
     pub value: NodeId,
@@ -568,7 +576,7 @@ pub struct ObjectProperty {
 }
 
 /// Property key
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum PropertyKey {
     /// Identifier key
     Identifier(String),
@@ -581,7 +589,7 @@ pub enum PropertyKey {
 }
 
 /// Member property access
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum MemberProperty {
     /// Property access: obj.prop
     Identifier(String),
@@ -590,21 +598,21 @@ pub enum MemberProperty {
 }
 
 /// Switch case
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SwitchCase {
     pub test: Option<NodeId>, // None for default case
     pub consequent: Vec<NodeId>,
 }
 
 /// Catch clause
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CatchClause {
     pub variable: Option<NodeId>,
     pub body: NodeId,
 }
 
 /// Class member
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum ClassMember {
     /// Property declaration
     Property {
@@ -642,7 +650,7 @@ pub enum ClassMember {
 }
 
 /// Import specifier
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum ImportSpecifier {
     /// Named import: import { x } from 'mod'
     Named { name: String, alias: Option<String> },
@@ -653,7 +661,7 @@ pub enum ImportSpecifier {
 }
 
 /// Export specifier
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum ExportSpecifier {
     /// Named export: export { x }
     Named { name: String, alias: Option<String> },
@@ -662,14 +670,14 @@ pub enum ExportSpecifier {
 }
 
 /// Enum member
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct EnumMember {
     pub name: String,
     pub value: Option<Literal>,
 }
 
 /// Template literal part
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum TemplatePart {
     /// Static string part
     Static(String),
@@ -678,7 +686,7 @@ pub enum TemplatePart {
 }
 
 /// Pattern property
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PatternProperty {
     pub key: PropertyKey,
     pub pattern: NodeId,
@@ -686,7 +694,7 @@ pub struct PatternProperty {
 }
 
 /// Pattern element
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum PatternElement {
     /// Regular pattern
     Pattern(Option<NodeId>),
