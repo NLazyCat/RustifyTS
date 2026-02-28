@@ -4,6 +4,7 @@
 //! AST representation using Deno as the backend parser.
 
 pub mod error;
+pub mod ast;
 
 // Re-export key types
 pub use error::ParseError;
@@ -24,8 +25,7 @@ use std::path::Path;
 /// # Example
 ///
 /// ```no_run
-/// use transmute::parse_source;
-///
+/// # use crate::parse_source;
 /// let ts_code = r#"
 ///     function hello(name: string): string {
 ///         return `Hello, ${name}!`;
@@ -33,7 +33,7 @@ use std::path::Path;
 /// "#;
 ///
 /// match parse_source(ts_code) {
-///     Ok(arena) => println!("Parsed AST with {} nodes", arena.node_count()),
+///     Ok(arena) => println!("Parsed"),
 ///     Err(e) => eprintln!("Parse error: {}", e),
 /// }
 /// ```
@@ -58,11 +58,10 @@ pub fn parse_source(source: &str) -> Result<(), ParseError> {
 /// # Example
 ///
 /// ```no_run
-/// use transmute::parse_file;
-/// use std::path::Path;
-///
+/// # use crate::parse_file;
+/// # use std::path::Path;
 /// match parse_file(Path::new("example.ts")) {
-///     Ok(arena) => println!("Parsed AST"),
+///     Ok(arena) => println!("Parsed"),
 ///     Err(e) => eprintln!("Parse error: {}", e),
 /// }
 /// ```
