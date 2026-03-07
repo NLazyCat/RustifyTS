@@ -3,14 +3,14 @@
 ## Current Position
 
 **Phase:** 03-semantic
-**Plan:** 03-00
-**Status:** Wave 0 Complete
+**Plan:** 03-02a
+**Status:** Wave 1 In Progress
 
 ## Progress Bar
 
 ```
 [████████████████] 6/6 waves complete (100%) - Parser Phase
-[█               ] 1/5 waves complete (20%) - Semantic Phase
+[███             ] 2/5 waves complete (40%) - Semantic Phase
 ```
 
 ### Completed Waves
@@ -56,10 +56,15 @@
   - Summary: 03-00-SUMMARY.md
   - Status: Complete
 
+- [x] Wave 1: Core Data Structures (Type System)
+  - Files: src/semantic/types/**/*
+  - Summary: 03-02a-SUMMARY.md
+  - Status: Complete
+
 ### Current Wave
 
 - [ ] Wave 1: Core Data Structures
-  - Status: Not Started
+  - Status: Complete
   - Prerequisites: Wave 0 complete
 
 ### Remaining Waves
@@ -117,16 +122,36 @@ None
    - Follows Rust convention with #[cfg(test)] mod tests; in each module
    - Establishes TDD foundation for all future semantic implementation
 
+### Wave 1: Type System Implementation
+
+1. **TypeId implements lasso::Key trait**
+   - Enables future optimization with lasso interner if needed
+   - Provides consistent key interface for interning operations
+
+2. **Custom type interner implementation**
+   - Used instead of lasso::Rodeo which is designed for string interning
+   - Provides the same functionality with support for arbitrary Type instances
+   - Uses FxHashMap for fast lookups and Vec for storage
+
+3. **Union type normalization**
+   - Union types are automatically sorted and deduplicated during interning
+   - Ensures consistent representation of equivalent unions
+   - Single-type unions return the type directly, empty unions return Never
+
+4. **Object type hashing**
+   - Object properties are hashed in sorted order to ensure consistent hashing
+   - Enables proper deduplication of objects with identical properties in different order
+
 ## Issues
 
 None
 
-## Session: Wave 03-00
+## Session: Wave 03-02a
 
 **Last session:** 2026-03-07
-**Stopped at:** Wave 0 complete, 03-00-SUMMARY.md created
-**Duration:** 5 minutes
-**Commit:** 1ed2057
+**Stopped at:** Wave 1 complete, 03-02a-SUMMARY.md created
+**Duration:** 20 minutes
+**Commit:** [pending]
 
 ## Last Commit
 

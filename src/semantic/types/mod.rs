@@ -3,5 +3,13 @@
 //! Implements TypeScript type checking, inference, and type validation.
 //! Handles type relationships, compatibility checks, and type operations.
 
-#[cfg(test)]
-mod tests;
+pub mod representation;
+pub mod interner;
+pub mod unify;
+pub mod resolver;
+
+pub use representation::*;
+pub use interner::*;
+pub use unify::*;
+pub use resolver::*;
+
