@@ -13,3 +13,5 @@ pub use interner::*;
 pub use unify::*;
 pub use resolver::*;
 
+#[cfg(test)]
+mod tests;

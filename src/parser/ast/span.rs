@@ -3,6 +3,7 @@
 //! This module provides types for tracking source code locations using zero-based
 //! byte offsets internally and converting to 1-based line/column for display.
 
+use std::fmt;
 use std::ops::Range;
 
 /// A span representing a range in source code
@@ -148,6 +149,12 @@ impl Span {
     #[inline]
     pub fn merge(span1: Span, span2: Span) -> Span {
         span1.extend(span2)
+    }
+}
+
+impl fmt::Display for Span {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}..{}", self.start, self.end)
     }
 }
 
