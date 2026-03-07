@@ -28,16 +28,16 @@
 ---
 
 ### Phase 02: 解析层
-**状态:** 🟡 进行中 (3/6 waves 完成)
+**状态:** ✅ 完成 (6/6 waves 完成)
 **目标:** 实现基础解析层，支持 Deno 后端
 
 **Waves Progress:**
 - [x] Wave 1: Project Configuration and Error Types (Complete - f81d3c2)
 - [x] Wave 2: Span and Location Tracking (Complete - 82c4844)
 - [x] Wave 3: AST Types and Node Infrastructure (Complete - aa4b9a3)
-- [ ] Wave 4: Visitor Pattern
-- [ ] Wave 5: Deno Backend Implementation
-- [ ] Wave 6: Integration and Public API
+- [x] Wave 4: Visitor Pattern (Complete - 2a80756)
+- [x] Wave 5: Deno Backend Implementation (Complete - e23b98b)
+- [x] Wave 6: Integration and Public API (Complete - 2026-03-07)
 
 **交付物:**
 - `src/parser/mod.rs` - 模块接口
@@ -71,22 +71,32 @@ pub struct AstNode {
 ---
 
 ### Phase 03: 语义分析层
-**状态:** 🔴 未开始
+**状态:** 🟡 规划完成
 **目标:** 实现基础 IR 构建
+
+**Waves Progress:**
+- [ ] Wave 1: Scope & Symbol Table Implementation (03-01, 03-02)
+- [ ] Wave 2: Control Flow & IR Construction (03-03)
+
+**Plans:** 3 plans
+- [ ] 03-01-PLAN.md — Scope and Symbol Table implementation
+- [ ] 03-02-PLAN.md — Type System with interning and compatibility checking
+- [ ] 03-03-PLAN.md — Control Flow Analysis and IR construction
 
 **交付物:**
 - `src/semantic/mod.rs` - 模块接口
 - `src/semantic/analyzer.rs` - 主分析器
 - `src/semantic/scope/analyzer.rs` - 作用域分析器
-- `src/semantic/scope/table.rs` - 作用域表
+- `src/semantic/scope/scope.rs` - 作用域数据结构
 - `src/semantic/symbol/mod.rs` - 符号表
 - `src/semantic/symbol/table.rs` - 符号表实现
-- `src/semantic/type/mod.rs` - 类型系统
-- `src/semantic/type/infer.rs` - 类型推断
-- `src/semantic/type/unify.rs` - 类型统一
+- `src/semantic/types/mod.rs` - 类型系统
+- `src/semantic/types/interner.rs` - 类型 Interner
+- `src/semantic/types/unify.rs` - 类型统一和兼容性检查
 - `src/semantic/flow/mod.rs` - 控制流
 - `src/semantic/flow/cfg.rs` - 控制流图
-- `src/semantic/flow/dominance.rs` - 支配关系
+- `src/semantic/flow/builder.rs` - CFG 构建器
+- `src/semantic/ir/mod.rs` - 中间表示
 
 **关键类型:**
 ```rust
@@ -318,11 +328,10 @@ pub fn transmute(source: &str) -> Result<String> {
 ## 进度跟踪
 
 ### 总体进度
-- 完成: 1/7 阶段 (14%)
+- 完成: 2/7 阶段 (29%)
 - 预计总时间: 27 天
 
 ### 当前阶段
-- 当前阶段: Phase 02 - 解析层
-- 阶段状态: 🟡 进行中 (3/6 waves)
-- Wave 2: Span and Location Tracking ✅
-- Wave 3: AST Types and Node Infrastructure ✅
+- 当前阶段: Phase 03 - 语义分析层
+- 阶段状态: 🟡 规划完成
+- 下一阶段目标: 实现基础 IR 构建
