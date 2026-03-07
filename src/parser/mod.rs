@@ -5,9 +5,11 @@
 
 pub mod error;
 pub mod ast;
+pub mod backend;
 
 // Re-export key types
 pub use error::ParseError;
+pub use backend::{ParserBackend, DenoBackend, DenoBackendConfig};
 
 // Stub functions for Wave 1, will be implemented in later waves
 use std::path::Path;

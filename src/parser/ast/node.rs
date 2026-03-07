@@ -4,7 +4,7 @@
 //! AST nodes using bumpalo arena allocation for efficient memory usage.
 
 use bumpalo::Bump;
-use super::types::{NodeKind, NodeId};
+use super::types::NodeKind;
 use super::Span;
 
 /// AST node with arena lifetime

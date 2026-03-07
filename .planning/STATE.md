@@ -3,13 +3,13 @@
 ## Current Position
 
 **Phase:** 02-parser
-**Plan:** 02-03
-**Status:** Wave 3 Complete
+**Plan:** 02-04
+**Status:** Wave 4 Complete
 
 ## Progress Bar
 
 ```
-[████████████] 3/6 waves complete (50%)
+[████████████████] 4/6 waves complete (67%)
 ```
 
 ### Completed Waves
@@ -31,11 +31,17 @@
   - Summary: 02-03-SUMMARY.md
   - Status: Complete
 
+- [x] Wave 4: Visitor Pattern
+  - Files: src/parser/ast/visitor.rs, src/parser/ast/mod.rs
+  - Commit: 2a80756
+  - Summary: 02-04-SUMMARY.md
+  - Status: Complete
+
 ### Current Wave
 
-- [ ] Wave 4: Visitor Pattern
+- [ ] Wave 5: Deno Backend Implementation
   - Status: Not Started
-  - Prerequisites: Wave 3 complete
+  - Prerequisites: Wave 4 complete
 
 ### Remaining Waves
 
@@ -72,21 +78,28 @@ None
    - NodeBuilder provides safe interface
    - Reduces boilerplate and ensures correctness
 
-3. **Categorized enums for NodeKind**
-   - Grouped by TypeScript language category
-   - Better code organization and maintainability
+### Wave 4: Visitor Pattern
+
+1. **Visitor trait with default recursive traversal**
+   - Typed methods for all AST node kinds
+   - Default implementation visits all children recursively
+
+2. **Concrete visitor implementations**
+   - NodeCounter: counts total nodes in AST
+   - DepthCalculator: measures maximum tree depth
+   - CollectIdentifiers: gathers all identifier names
 
 ## Issues
 
 None
 
-## Session: Wave 02-03
+## Session: Wave 02-04
 
 **Last session:** 2026-03-07
-**Stopped at:** Wave 3 complete, 02-03-SUMMARY.md created
-**Duration:** Unknown (previous session)
-**Commit:** aa4b9a3
+**Stopped at:** Wave 4 complete, 02-04-SUMMARY.md created
+**Duration:** 15 minutes
+**Commit:** 2a80756
 
 ## Last Commit
 
-**aa4b9a3** - feat(02-03): add spans feature flag
+**2a80756** - feat(02-04): implement visitor pattern for AST traversal
