@@ -7,8 +7,10 @@
 pub mod node;
 pub mod span;
 pub mod types;
+pub mod visitor;
 
 // Re-export key types for convenience
 pub use node::{AstArena, AstNode, NodeBuilder};
 pub use span::{LineMap, Span};
 pub use types::{NodeKind, NodeId};
+pub use visitor::{Visitor, NodeCounter, DepthCalculator, CollectIdentifiers};
