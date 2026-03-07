@@ -28,13 +28,13 @@
 ---
 
 ### Phase 02: 解析层
-**状态:** 🟡 进行中 (2/6 waves 完成)
+**状态:** 🟡 进行中 (3/6 waves 完成)
 **目标:** 实现基础解析层，支持 Deno 后端
 
 **Waves Progress:**
 - [x] Wave 1: Project Configuration and Error Types (Complete - f81d3c2)
 - [x] Wave 2: Span and Location Tracking (Complete - 82c4844)
-- [ ] Wave 3: AST Types and Node Infrastructure
+- [x] Wave 3: AST Types and Node Infrastructure (Complete - aa4b9a3)
 - [ ] Wave 4: Visitor Pattern
 - [ ] Wave 5: Deno Backend Implementation
 - [ ] Wave 6: Integration and Public API
@@ -323,5 +323,6 @@ pub fn transmute(source: &str) -> Result<String> {
 
 ### 当前阶段
 - 当前阶段: Phase 02 - 解析层
-- 阶段状态: 🟡 进行中 (2/6 waves)
+- 阶段状态: 🟡 进行中 (3/6 waves)
 - Wave 2: Span and Location Tracking ✅
+- Wave 3: AST Types and Node Infrastructure ✅
