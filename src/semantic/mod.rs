@@ -11,5 +11,4 @@ pub mod scope;
 pub mod symbol;
 pub mod types;
 pub mod flow;
-pub mod ir;
 pub mod analyzer;
