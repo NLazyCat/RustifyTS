@@ -2,14 +2,15 @@
 
 ## Current Position
 
-**Phase:** 02-parser
-**Plan:** 02-04
-**Status:** Wave 4 Complete
+**Phase:** 03-semantic
+**Plan:** 03-00
+**Status:** Wave 0 Complete
 
 ## Progress Bar
 
 ```
-[████████████████] 4/6 waves complete (67%)
+[████████████████] 6/6 waves complete (100%) - Parser Phase
+[█               ] 1/5 waves complete (20%) - Semantic Phase
 ```
 
 ### Completed Waves
@@ -37,16 +38,36 @@
   - Summary: 02-04-SUMMARY.md
   - Status: Complete
 
+- [x] Wave 5: Deno Backend Implementation
+  - Files: src/parser/backend/deno.rs, src/parser/backend/mod.rs
+  - Commit: e23b98b
+  - Status: Complete
+
+- [x] Wave 6: Integration and Public API
+  - Status: Complete
+
+## Phase 03: Semantic Analysis
+
+### Completed Waves
+
+- [x] Wave 0: Test Infrastructure
+  - Files: src/semantic/**/*
+  - Commits: 8c7096b, 1ed2057
+  - Summary: 03-00-SUMMARY.md
+  - Status: Complete
+
 ### Current Wave
 
-- [ ] Wave 5: Deno Backend Implementation
+- [ ] Wave 1: Core Data Structures
   - Status: Not Started
-  - Prerequisites: Wave 4 complete
+  - Prerequisites: Wave 0 complete
 
 ### Remaining Waves
 
-- [ ] Wave 5: Deno Backend Implementation
-- [ ] Wave 6: Integration and Public API
+- [ ] Wave 1: Core Data Structures (03-01a, 03-02a)
+- [ ] Wave 1: Analysis Implementations (03-01b, 03-02b)
+- [ ] Wave 2: IR & CFG Construction (03-03a)
+- [ ] Wave 3: Main Analyzer & Integration (03-03b)
 
 ## Blockers
 
@@ -89,17 +110,24 @@ None
    - DepthCalculator: measures maximum tree depth
    - CollectIdentifiers: gathers all identifier names
 
+### Wave 0: Semantic Test Infrastructure
+
+1. **Test-per-component architecture**
+   - Each semantic analysis component has its own test file
+   - Follows Rust convention with #[cfg(test)] mod tests; in each module
+   - Establishes TDD foundation for all future semantic implementation
+
 ## Issues
 
 None
 
-## Session: Wave 02-04
+## Session: Wave 03-00
 
 **Last session:** 2026-03-07
-**Stopped at:** Wave 4 complete, 02-04-SUMMARY.md created
-**Duration:** 15 minutes
-**Commit:** 2a80756
+**Stopped at:** Wave 0 complete, 03-00-SUMMARY.md created
+**Duration:** 5 minutes
+**Commit:** 1ed2057
 
 ## Last Commit
 
-**2a80756** - feat(02-04): implement visitor pattern for AST traversal
+**1ed2057** - feat(03-00): create skeleton test files for semantic analysis
