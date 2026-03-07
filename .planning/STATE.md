@@ -10,7 +10,7 @@
 
 ```
 [████████████████] 6/6 waves complete (100%) - Parser Phase
-[███             ] 2/5 waves complete (40%) - Semantic Phase
+[██████          ] 3/5 waves complete (60%) - Semantic Phase
 ```
 
 ### Completed Waves
@@ -56,6 +56,12 @@
   - Summary: 03-00-SUMMARY.md
   - Status: Complete
 
+- [x] Wave 1: Core Data Structures (Scope & Symbol)
+  - Files: src/semantic/scope/**/*, src/semantic/symbol/**/*
+  - Commits: 7820cc5, 949d813, 3437b65
+  - Summary: 03-01a-SUMMARY.md
+  - Status: Complete
+
 - [x] Wave 1: Core Data Structures (Type System)
   - Files: src/semantic/types/**/*
   - Summary: 03-02a-SUMMARY.md
@@ -63,9 +69,9 @@
 
 ### Current Wave
 
-- [ ] Wave 1: Core Data Structures
-  - Status: Complete
-  - Prerequisites: Wave 0 complete
+- [ ] Wave 1: Analysis Implementations
+  - Status: Not Started
+  - Prerequisites: Wave 1 Core Data Structures complete
 
 ### Remaining Waves
 
@@ -122,37 +128,33 @@ None
    - Follows Rust convention with #[cfg(test)] mod tests; in each module
    - Establishes TDD foundation for all future semantic implementation
 
-### Wave 1: Type System Implementation
+### Wave 1: Scope & Symbol Implementation
 
-1. **TypeId implements lasso::Key trait**
-   - Enables future optimization with lasso interner if needed
-   - Provides consistent key interface for interning operations
+1. **Newtype IDs for ScopeId and SymbolId**
+   - Type-safe identifiers prevent mixing up IDs across different components
+   - Consistent with Copy and efficient storage and comparison
 
-2. **Custom type interner implementation**
-   - Used instead of lasso::Rodeo which is designed for string interning
-   - Provides the same functionality with support for arbitrary Type instances
-   - Uses FxHashMap for fast lookups and Vec for storage
+2. **Scope hierarchy with parent links**
+   - Nested scopes form a tree structure supporting lexical scoping rules
+   - ScopeTable provides stack management
+   - Efficient symbol lookup traversing up the parent chain
 
-3. **Union type normalization**
-   - Union types are automatically sorted and deduplicated during interning
-   - Ensures consistent representation of equivalent unions
-   - Single-type unions return the type directly, empty unions return Never
-
-4. **Object type hashing**
-   - Object properties are hashed in sorted order to ensure consistent hashing
-   - Enables proper deduplication of objects with identical properties in different order
+3. **Symbol metadata includes type_id field**
+   - Each symbol has optional type information
+   - Enables seamless integration with type checking phase
+   - Supports export flags for module exports
 
 ## Issues
 
 None
 
-## Session: Wave 03-02a
+## Session: Wave 03-01a
 
 **Last session:** 2026-03-07
-**Stopped at:** Wave 1 complete, 03-02a-SUMMARY.md created
-**Duration:** 20 minutes
-**Commit:** [pending]
+**Stopped at:** Wave 1 complete, 03-01a-SUMMARY.md created
+**Duration:** 15 minutes
+**Commit:** 949d813
 
 ## Last Commit
 
-**1ed2057** - feat(03-00): create skeleton test files for semantic analysis
+**3437b65** - fix(03-semantic-01a): add missing implementations for compilation
