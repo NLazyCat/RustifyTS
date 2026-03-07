@@ -10,8 +10,21 @@
 // Parser module - Wave 1
 pub mod parser;
 
+// Semantic analysis module - Wave 3
+pub mod semantic;
+
 // Re-export key types for convenient access
-pub use parser::{error::ParseError, parse_source, parse_file};
+pub use parser::{
+    error::ParseError,
+    parse_source,
+    parse_file,
+    parse_source_async,
+    parse_file_async,
+    AstArena,
+    DenoBackend,
+    DenoBackendConfig,
+    ParserBackend,
+};
 
 /// Library version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
