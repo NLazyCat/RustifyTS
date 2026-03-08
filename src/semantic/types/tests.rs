@@ -716,6 +716,275 @@ mod unify {
         let result = unify(&ref1, &ref_different_name, &mut interner);
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_primitive_assignability() {
+        let mut interner = TypeInterner::new();
+
+        // Identical types are assignable
+        assert!(is_assignable(&Type::Primitive(PrimitiveType::String), &Type::Primitive(PrimitiveType::String), &interner));
+        assert!(is_assignable(&Type::Primitive(PrimitiveType::Number), &Type::Primitive(PrimitiveType::Number), &interner));
+
+        // Never can be assigned to any type
+        assert!(is_assignable(&Type::Primitive(PrimitiveType::Never), &Type::Primitive(PrimitiveType::String), &interner));
+        assert!(is_assignable(&Type::Primitive(PrimitiveType::Never), &Type::Primitive(PrimitiveType::Number), &interner));
+        assert!(is_assignable(&Type::Primitive(PrimitiveType::Never), &Type::Primitive(PrimitiveType::Unknown), &interner));
+
+        // Any can be assigned to any type and from any type
+        assert!(is_assignable(&Type::Primitive(PrimitiveType::Any), &Type::Primitive(PrimitiveType::String), &interner));
+        assert!(is_assignable(&Type::Primitive(PrimitiveType::String), &Type::Primitive(PrimitiveType::Any), &interner));
+        assert!(is_assignable(&Type::Primitive(PrimitiveType::Any), &Type::Primitive(PrimitiveType::Number), &interner));
+        assert!(is_assignable(&Type::Primitive(PrimitiveType::Number), &Type::Primitive(PrimitiveType::Any), &interner));
+
+        // Unknown can be assigned from any type
+        assert!(is_assignable(&Type::Primitive(PrimitiveType::String), &Type::Primitive(PrimitiveType::Unknown), &interner));
+        assert!(is_assignable(&Type::Primitive(PrimitiveType::Number), &Type::Primitive(PrimitiveType::Unknown), &interner));
+        assert!(is_assignable(&Type::Primitive(PrimitiveType::Boolean), &Type::Primitive(PrimitiveType::Unknown), &interner));
+
+        // Incompatible primitives are not assignable
+        assert!(!is_assignable(&Type::Primitive(PrimitiveType::String), &Type::Primitive(PrimitiveType::Number), &interner));
+        assert!(!is_assignable(&Type::Primitive(PrimitiveType::Number), &Type::Primitive(PrimitiveType::Boolean), &interner));
+        assert!(!is_assignable(&Type::Primitive(PrimitiveType::Boolean), &Type::Primitive(PrimitiveType::String), &interner));
+    }
+
+    #[test]
+    fn test_array_assignability() {
+        let mut interner = TypeInterner::new();
+
+        let string_array = Type::Array(Box::new(Type::Primitive(PrimitiveType::String)));
+        let number_array = Type::Array(Box::new(Type::Primitive(PrimitiveType::Number)));
+        let unknown_array = Type::Array(Box::new(Type::Primitive(PrimitiveType::Unknown)));
+
+        // Covariant element types
+        assert!(is_assignable(&string_array, &unknown_array, &interner));
+        assert!(is_assignable(&number_array, &unknown_array, &interner));
+
+        // Different element types are not assignable
+        assert!(!is_assignable(&string_array, &number_array, &interner));
+        assert!(!is_assignable(&number_array, &string_array, &interner));
+    }
+
+    #[test]
+    fn test_tuple_assignability() {
+        let mut interner = TypeInterner::new();
+
+        let tuple1 = Type::Tuple(vec![
+            Type::Primitive(PrimitiveType::String),
+            Type::Primitive(PrimitiveType::Number),
+        ]);
+
+        let tuple2 = Type::Tuple(vec![
+            Type::Primitive(PrimitiveType::Unknown),
+            Type::Primitive(PrimitiveType::Unknown),
+        ]);
+
+        let tuple3 = Type::Tuple(vec![
+            Type::Primitive(PrimitiveType::String),
+            Type::Primitive(PrimitiveType::Number),
+            Type::Primitive(PrimitiveType::Boolean),
+        ]);
+
+        // Same length, compatible element types
+        assert!(is_assignable(&tuple1, &tuple2, &interner));
+
+        // Different lengths are not assignable
+        assert!(!is_assignable(&tuple1, &tuple3, &interner));
+        assert!(!is_assignable(&tuple3, &tuple1, &interner));
+
+        // Same length, incompatible element types
+        let tuple4 = Type::Tuple(vec![
+            Type::Primitive(PrimitiveType::Number),
+            Type::Primitive(PrimitiveType::String),
+        ]);
+        assert!(!is_assignable(&tuple1, &tuple4, &interner));
+    }
+
+    #[test]
+    fn test_object_assignability() {
+        let mut interner = TypeInterner::new();
+
+        // Object with name: string
+        let obj1 = Type::Object(ObjectType {
+            properties: {
+                let mut props = FxHashMap::default();
+                props.insert("name".to_string(), Type::Primitive(PrimitiveType::String));
+                props
+            },
+            index_signature: None,
+        });
+
+        // Object with name: string, age: number (extra property)
+        let obj2 = Type::Object(ObjectType {
+            properties: {
+                let mut props = FxHashMap::default();
+                props.insert("name".to_string(), Type::Primitive(PrimitiveType::String));
+                props.insert("age".to_string(), Type::Primitive(PrimitiveType::Number));
+                props
+            },
+            index_signature: None,
+        });
+
+        // Object with name: number (wrong type)
+        let obj3 = Type::Object(ObjectType {
+            properties: {
+                let mut props = FxHashMap::default();
+                props.insert("name".to_string(), Type::Primitive(PrimitiveType::Number));
+                props
+            },
+            index_signature: None,
+        });
+
+        // Extra properties allowed in structural typing
+        assert!(is_assignable(&obj2, &obj1, &interner));
+
+        // Missing property not allowed
+        assert!(!is_assignable(&obj1, &obj2, &interner));
+
+        // Wrong property type not allowed
+        assert!(!is_assignable(&obj3, &obj1, &interner));
+    }
+
+    #[test]
+    fn test_function_assignability() {
+        let mut interner = TypeInterner::new();
+
+        // (string) => number
+        let func1 = Type::Function {
+            params: vec![Type::Primitive(PrimitiveType::String)],
+            return_type: Box::new(Type::Primitive(PrimitiveType::Number)),
+            type_params: vec![],
+        };
+
+        // (unknown) => number
+        let func2 = Type::Function {
+            params: vec![Type::Primitive(PrimitiveType::Unknown)],
+            return_type: Box::new(Type::Primitive(PrimitiveType::Number)),
+            type_params: vec![],
+        };
+
+        // (string) => unknown
+        let func3 = Type::Function {
+            params: vec![Type::Primitive(PrimitiveType::String)],
+            return_type: Box::new(Type::Primitive(PrimitiveType::Unknown)),
+            type_params: vec![],
+        };
+
+        // Parameter contravariance: (unknown) => R assignable to (string) => R
+        assert!(is_assignable(&func2, &func1, &interner));
+        assert!(!is_assignable(&func1, &func2, &interner));
+
+        // Return type covariance: () => string assignable to () => unknown
+        assert!(is_assignable(&func1, &func3, &interner));
+        assert!(!is_assignable(&func3, &func1, &interner));
+    }
+
+    #[test]
+    fn test_union_assignability() {
+        let mut interner = TypeInterner::new();
+
+        // string | number
+        let union1 = Type::Union(vec![
+            Type::Primitive(PrimitiveType::String),
+            Type::Primitive(PrimitiveType::Number),
+        ]);
+
+        // string | number | boolean
+        let union2 = Type::Union(vec![
+            Type::Primitive(PrimitiveType::String),
+            Type::Primitive(PrimitiveType::Number),
+            Type::Primitive(PrimitiveType::Boolean),
+        ]);
+
+        // Union to type: assignable if all members are assignable
+        assert!(is_assignable(&union1, &Type::Primitive(PrimitiveType::Unknown), &interner));
+        assert!(!is_assignable(&union1, &Type::Primitive(PrimitiveType::String), &interner));
+
+        // Type to union: assignable if assignable to at least one member
+        assert!(is_assignable(&Type::Primitive(PrimitiveType::String), &union1, &interner));
+        assert!(!is_assignable(&Type::Primitive(PrimitiveType::Boolean), &union1, &interner));
+
+        // Union to union
+        assert!(is_assignable(&union1, &union2, &interner));
+        assert!(!is_assignable(&union2, &union1, &interner));
+    }
+
+    #[test]
+    fn test_intersection_assignability() {
+        let mut interner = TypeInterner::new();
+
+        // {name: string}
+        let obj1 = Type::Object(ObjectType {
+            properties: {
+                let mut props = FxHashMap::default();
+                props.insert("name".to_string(), Type::Primitive(PrimitiveType::String));
+                props
+            },
+            index_signature: None,
+        });
+
+        // {age: number}
+        let obj2 = Type::Object(ObjectType {
+            properties: {
+                let mut props = FxHashMap::default();
+                props.insert("age".to_string(), Type::Primitive(PrimitiveType::Number));
+                props
+            },
+            index_signature: None,
+        });
+
+        // {name: string} & {age: number}
+        let intersection = Type::Intersection(vec![obj1.clone(), obj2.clone()]);
+
+        // Intersection assignable to type if at least one member is assignable
+        assert!(is_assignable(&intersection, &obj1, &interner));
+        assert!(is_assignable(&intersection, &obj2, &interner));
+
+        // Type assignable to intersection if assignable to all members
+        let obj3 = Type::Object(ObjectType {
+            properties: {
+                let mut props = FxHashMap::default();
+                props.insert("name".to_string(), Type::Primitive(PrimitiveType::String));
+                props.insert("age".to_string(), Type::Primitive(PrimitiveType::Number));
+                props
+            },
+            index_signature: None,
+        });
+        assert!(is_assignable(&obj3, &intersection, &interner));
+        assert!(!is_assignable(&obj1, &intersection, &interner));
+    }
+
+    #[test]
+    fn test_generic_assignability() {
+        let mut interner = TypeInterner::new();
+
+        // Simple case: identical generics are assignable
+        let base_id = interner.intern(Type::Primitive(PrimitiveType::Any));
+        let generic1 = Type::Generic {
+            base: base_id,
+            args: vec![
+                Type::Primitive(PrimitiveType::String),
+            ],
+        };
+
+        let generic2 = Type::Generic {
+            base: base_id,
+            args: vec![
+                Type::Primitive(PrimitiveType::String),
+            ],
+        };
+
+        assert!(is_assignable(&generic1, &generic2, &interner));
+
+        // Different type arguments are not assignable (basic implementation)
+        let generic3 = Type::Generic {
+            base: base_id,
+            args: vec![
+                Type::Primitive(PrimitiveType::Number),
+            ],
+        };
+
+        assert!(!is_assignable(&generic1, &generic3, &interner));
+    }
 }
 
 mod representation {
