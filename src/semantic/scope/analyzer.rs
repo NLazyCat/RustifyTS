@@ -439,10 +439,11 @@ impl<'a> Visitor<'a> for ScopeAnalyzer<'a> {
                 self.visit_node(try_block_node);
             }
 
+
             // Handle catch clause if present
             if let Some(catch) = catch_clause {
                 // Create catch scope
-                let _catch_scope = self.push_scope(ScopeKind::Catch, self.get_span(node));
+                let catch_scope_id = self.push_scope(ScopeKind::Catch, self.get_span(node));
 
                 // Add exception parameter to catch scope if present
                 if let Some(_var_node_id) = catch.variable {
@@ -453,22 +454,25 @@ impl<'a> Visitor<'a> for ScopeAnalyzer<'a> {
                         if let NodeKind::Identifier { name } = child.kind() {
                             // Create symbol for exception parameter with 'any' type
                             let type_id = Some(self._type_interner.intern(Type::Primitive(PrimitiveType::Any)));
+                            let current_scope = self.current_scope();
 
-                            self.symbol_table.insert(
+                            let symbol_id = self.symbol_table.insert(
                                 name.clone(),
                                 SymbolKind::Variable,
                                 self.get_span(child),
-                                self.current_scope(),
+                                current_scope,
                                 type_id,
                             );
+
+
                             break;
                         }
                     }
                 }
 
-                // Visit catch body (second child is catch body)
-                if node.children().len() >= 2 {
-                    self.visit_node(node.children()[1]);
+                // Visit catch body (third child is catch body)
+                if node.children().len() >= 3 {
+                    self.visit_node(node.children()[2]);
                 }
 
                 // Pop catch scope
@@ -790,19 +794,20 @@ mod tests {
         // Literal: "error message"
         let lit_msg = builder.alloc(NodeKind::Literal(crate::parser::ast::types::Literal::String("error".to_string())));
 
-        // Identifier: err
-        let err_ident = builder.alloc(NodeKind::Identifier { name: "err".to_string() });
-
         // Try block: { throw "error"; }
         let try_block = builder.alloc_with_children(
             NodeKind::Block { statements: vec![] },
             vec![lit_msg],
         );
 
+        // Identifier: err (catch parameter - will be in children array)
+        let err_ident = builder.alloc(NodeKind::Identifier { name: "err".to_string() });
+
         // Catch body: { console.log(err); }
+        let lit_log = builder.alloc(NodeKind::Literal(crate::parser::ast::types::Literal::String("logged".to_string())));
         let catch_body = builder.alloc_with_children(
             NodeKind::Block { statements: vec![] },
-            vec![err_ident],
+            vec![lit_log],
         );
 
         // Try statement with catch clause
@@ -810,8 +815,8 @@ mod tests {
             NodeKind::Try {
                 try_block: NodeId::new(0),
                 catch_clause: Some(CatchClause {
-                    variable: Some(NodeId::new(1)), // err_ident reference
-                    body: NodeId::new(1), // catch_body reference
+                    variable: Some(NodeId::new(1)), // err_ident reference (second child)
+                    body: NodeId::new(2), // catch_body reference (third child)
                 }),
                 finally_block: None,
             },
@@ -821,17 +826,21 @@ mod tests {
         // Visit the try statement
         analyzer.visit_node(try_stmt);
 
-        // Should have 3 scopes: root + catch
-        assert_eq!(analyzer.scope_table.scope_count(), 2);
+        // Should have 4 scopes: root + try block + catch + catch body
+        assert_eq!(analyzer.scope_table.scope_count(), 4);
 
         // err should be in the catch scope
         let root_scope = analyzer.scope_table.root();
         let scopes: Vec<_> = analyzer.scope_table.scopes().iter().collect();
-        let catch_scope = scopes[1].id();
+        let try_block_scope = scopes[1].id();
+        let catch_scope = scopes[2].id();
+        let catch_body_scope = scopes[3].id();
 
-        // err should be in catch scope, not root
+        // err should be in catch scope, not root, not try block, not catch body
         assert!(analyzer.symbol_table.lookup_in_scope("err", root_scope).is_none());
+        assert!(analyzer.symbol_table.lookup_in_scope("err", try_block_scope).is_none());
         assert!(analyzer.symbol_table.lookup_in_scope("err", catch_scope).is_some());
+        assert!(analyzer.symbol_table.lookup_in_scope("err", catch_body_scope).is_none());
     }
 
     #[test]
@@ -872,8 +881,8 @@ mod tests {
         // Visit the try statement
         analyzer.visit_node(try_stmt);
 
-        // Should have 2 scopes: root + catch
-        assert_eq!(analyzer.scope_table.scope_count(), 2);
+        // Should have 3 scopes: root + catch + catch body (try block not visited as separate scope)
+        assert_eq!(analyzer.scope_table.scope_count(), 3);
 
         // No exception parameter should exist
         let root_scope = analyzer.scope_table.root();
@@ -1104,7 +1113,9 @@ mod tests {
         // The function name 'add' should be in the function scope
         let add_symbol = analyzer.symbol_table.lookup_in_scope("add", function_scope);
         assert!(add_symbol.is_some(), "Function name 'add' should exist in function scope");
-        assert_eq!(add_symbol.unwrap().kind(), SymbolKind::Function);
+        let add_symbol_id = add_symbol.unwrap();
+        let add_symbol_data = &analyzer.symbol_table.symbols()[add_symbol_id.get() as usize];
+        assert_eq!(add_symbol_data.kind(), SymbolKind::Function);
 
         // Parameter 'x' should also be in function scope
         let x_symbol = analyzer.symbol_table.lookup_in_scope("x", function_scope);
@@ -1247,12 +1258,16 @@ mod tests {
 
         let x_symbol = analyzer.symbol_table.lookup_in_scope("x", function_scope);
         assert!(x_symbol.is_some());
-        let x_type_id = x_symbol.unwrap().type_id();
+        let x_symbol_id = x_symbol.unwrap();
+        let x_symbol_data = &analyzer.symbol_table.symbols()[x_symbol_id.get() as usize];
+        let x_type_id = x_symbol_data.type_id();
         assert!(x_type_id.is_some(), "Parameter 'x' should have a type annotation");
 
         let y_symbol = analyzer.symbol_table.lookup_in_scope("y", function_scope);
         assert!(y_symbol.is_some());
-        let y_type_id = y_symbol.unwrap().type_id();
+        let y_symbol_id = y_symbol.unwrap();
+        let y_symbol_data = &analyzer.symbol_table.symbols()[y_symbol_id.get() as usize];
+        let y_type_id = y_symbol_data.type_id();
         assert!(y_type_id.is_some(), "Parameter 'y' should have a type annotation");
 
         // Verify the types are correct
@@ -1301,7 +1316,9 @@ mod tests {
         assert!(x_symbol.is_some(), "Untyped parameter 'x' should exist in function scope");
 
         // The type should be None (no annotation)
-        let x_type_id = x_symbol.unwrap().type_id();
+        let x_symbol_id = x_symbol.unwrap();
+        let x_symbol_data = &analyzer.symbol_table.symbols()[x_symbol_id.get() as usize];
+        let x_type_id = x_symbol_data.type_id();
         assert!(x_type_id.is_none(), "Untyped parameter should not have a type annotation");
     }
 }
