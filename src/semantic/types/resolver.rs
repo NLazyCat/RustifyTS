@@ -4,8 +4,10 @@
 //! to their actual type definitions in the current scope.
 
 use super::*;
+use crate::parser::ast::types::{Parameter, TypeAnnotation};
 use crate::parser::ast::visitor::Visitor;
 use crate::parser::ast::{AstNode, NodeKind};
+use crate::parser::ast::types::VariableDeclaration;
 use crate::semantic::scope::{ScopeId, ScopeTable};
 use crate::semantic::symbol::{SymbolKind, SymbolTable};
 use fxhash::FxHashMap;
@@ -16,8 +18,8 @@ use std::cell::RefCell;
 /// The TypeResolver traverses the AST and resolves all type references, storing
 /// the resolved TypeId in the corresponding symbol table entries.
 pub struct TypeResolver<'a> {
-    /// Symbol table for looking up type definitions
-    symbol_table: &'a SymbolTable,
+    /// Symbol table for looking up and updating type definitions
+    symbol_table: &'a mut SymbolTable,
     /// Scope table for traversing the scope hierarchy
     scope_table: &'a ScopeTable,
     /// Type interner for creating new types
@@ -33,7 +35,7 @@ pub struct TypeResolver<'a> {
 impl<'a> TypeResolver<'a> {
     /// Create a new TypeResolver with the given context.
     pub fn new(
-        symbol_table: &'a SymbolTable,
+        symbol_table: &'a mut SymbolTable,
         scope_table: &'a ScopeTable,
         type_interner: &'a mut TypeInterner,
         root_scope: ScopeId,
@@ -333,6 +335,50 @@ impl<'a> TypeResolver<'a> {
             crate::parser::ast::Span::new(0, 0)
         }
     }
+
+    /// Convert a TypeAnnotation to a Type.
+    fn type_annotation_to_type(&mut self, annotation: &TypeAnnotation) -> Type {
+        match annotation {
+            TypeAnnotation::TypeReference { name, type_params } => {
+                if let Some(params) = type_params {
+                    let resolved_params: Vec<_> = params.iter()
+                        .map(|p| self.type_annotation_to_type(p))
+                        .collect();
+                    Type::Reference {
+                        name: name.clone(),
+                        type_args: resolved_params,
+                    }
+                } else {
+                    Type::Reference {
+                        name: name.clone(),
+                        type_args: vec![],
+                    }
+                }
+            }
+            TypeAnnotation::ArrayType(elem) => {
+                Type::Array(Box::new(self.type_annotation_to_type(elem)))
+            }
+            TypeAnnotation::UnionType(types) => {
+                let union_types: Vec<_> = types.iter()
+                    .map(|t| self.type_annotation_to_type(t))
+                    .collect();
+                Type::Union(union_types)
+            }
+            TypeAnnotation::FunctionType { params, return_type } => {
+                let param_types: Vec<_> = params.iter()
+                    .map(|p| self.type_annotation_to_type(&p.type_annotation.clone()
+                        .unwrap_or(TypeAnnotation::Unknown)))
+                    .collect();
+                let return_ty = self.type_annotation_to_type(return_type);
+                Type::Function {
+                    params: param_types,
+                    return_type: Box::new(return_ty),
+                    type_params: vec![],
+                }
+            }
+            TypeAnnotation::Unknown => Type::Primitive(PrimitiveType::Unknown),
+        }
+    }
 }
 
 impl<'a, 'ast> Visitor<'ast> for TypeResolver<'a> {
@@ -342,6 +388,97 @@ impl<'a, 'ast> Visitor<'ast> for TypeResolver<'a> {
         for child in node.children() {
             self.visit_node(child);
         }
+    }
+
+    /// Visit a variable statement and resolve types for variable declarations.
+    fn visit_variable_statement(&mut self, node: &'ast AstNode<'ast>) {
+        if let NodeKind::VariableStatement { declarations } = node.kind() {
+            for decl in declarations {
+                // Resolve the type for this variable
+                let type_id = if let Some(type_annotation) = &decl.type_annotation {
+                    // Convert TypeAnnotation to Type and resolve it
+                    let type_value = self.type_annotation_to_type(type_annotation);
+                    match self.resolve_type(&type_value) {
+                        Ok(id) => Some(id),
+                        Err(_) => None, // TODO: Collect errors instead of silently failing
+                    }
+                } else {
+                    // For now, use Unknown type if no annotation
+                    Some(self.type_interner.intern(Type::Primitive(PrimitiveType::Unknown)))
+                };
+
+                // Update the symbol's type_id
+                if let Some(symbol_id) = self.symbol_table.lookup_lexical(
+                    &decl.name,
+                    self.current_scope,
+                    self.scope_table,
+                ) {
+                    if let Some(ty) = type_id {
+                        if let Some(symbol) = self.symbol_table.lookup_mut(symbol_id) {
+                            symbol.set_type_id(ty);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Visit children (initializers)
+        self.default_visit_node(node);
+    }
+
+    /// Visit a function declaration and resolve types for parameters and return type.
+    fn visit_function_declaration(&mut self, node: &'ast AstNode<'ast>) {
+        if let NodeKind::FunctionDeclaration { name, params, return_type, body: _ } = node.kind() {
+            // Find the function symbol
+            if let Some(symbol_id) = self.symbol_table.lookup_lexical(
+                name,
+                self.current_scope,
+                self.scope_table,
+            ) {
+                // Build the function type
+                let param_types: Vec<_> = params.iter()
+                    .map(|param| {
+                        let ty = if let Some(type_annotation) = &param.type_annotation {
+                            let type_value = self.type_annotation_to_type(type_annotation);
+                            self.resolve_type(&type_value).unwrap_or_else(|_| {
+                                self.type_interner.intern(Type::Primitive(PrimitiveType::Unknown))
+                            })
+                        } else {
+                            self.type_interner.intern(Type::Primitive(PrimitiveType::Unknown))
+                        };
+                        self.type_interner.get(ty).unwrap().clone()
+                    })
+                    .collect();
+
+                let return_ty = if let Some(rt) = return_type {
+                    let type_value = self.type_annotation_to_type(rt);
+                    self.resolve_type(&type_value).ok()
+                        .map(|id| Box::new(self.type_interner.get(id).unwrap().clone()))
+                } else {
+                    None
+                };
+
+                // Create the function type
+                let function_type = Type::Function {
+                    params: param_types,
+                    return_type: return_ty.unwrap_or_else(|| {
+                        Box::new(Type::Primitive(PrimitiveType::Unknown))
+                    }),
+                    type_params: vec![],
+                };
+
+                // Intern the function type
+                let type_id = self.type_interner.intern(function_type);
+
+                // Update the symbol's type_id
+                if let Some(symbol) = self.symbol_table.lookup_mut(symbol_id) {
+                    symbol.set_type_id(type_id);
+                }
+            }
+        }
+
+        // Visit function body
+        self.default_visit_node(node);
     }
 }
 

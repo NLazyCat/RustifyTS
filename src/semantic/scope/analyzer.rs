@@ -5,9 +5,9 @@
 use super::{ScopeId, ScopeKind, ScopeTable};
 use crate::parser::ast::visitor::Visitor;
 use crate::parser::ast::{AstNode, NodeKind, Span};
-use crate::parser::ast::types::VariableKind;
+use crate::parser::ast::types::{VariableKind, TypeAnnotation};
 use crate::semantic::symbol::{SymbolId, SymbolKind, SymbolTable};
-use crate::semantic::types::{TypeId, TypeInterner};
+use crate::semantic::types::{TypeId, TypeInterner, Type, PrimitiveType};
 use bumpalo::Bump;
 
 /// Scope analyzer visitor that builds the scope hierarchy and populates the symbol table.
@@ -52,6 +52,84 @@ impl<'a> ScopeAnalyzer<'a> {
         #[cfg(not(feature = "spans"))]
         {
             Span::new(0, 0)
+        }
+    }
+
+    /// Convert a TypeAnnotation to a Type and intern it.
+    fn intern_type_annotation(&mut self, annotation: &Option<TypeAnnotation>) -> Option<TypeId> {
+        annotation.as_ref().map(|ann| {
+            let ty = self.type_annotation_to_type(ann);
+            self._type_interner.intern(ty)
+        })
+    }
+
+    /// Convert a TypeAnnotation to a Type.
+    fn type_annotation_to_type(&self, annotation: &TypeAnnotation) -> Type {
+        match annotation {
+            TypeAnnotation::TypeReference { name, type_params } => {
+                // For primitive types, convert directly
+                let is_primitive = match name.as_str() {
+                    "string" | "number" | "boolean" | "void" | "any" | "unknown" |
+                    "null" | "undefined" | "never" => true,
+                    _ => false,
+                };
+
+                if is_primitive {
+                    let primitive_type = match name.as_str() {
+                        "string" => PrimitiveType::String,
+                        "number" => PrimitiveType::Number,
+                        "boolean" => PrimitiveType::Boolean,
+                        "void" => PrimitiveType::Void,
+                        "any" => PrimitiveType::Any,
+                        "unknown" => PrimitiveType::Unknown,
+                        "null" => PrimitiveType::Null,
+                        "undefined" => PrimitiveType::Undefined,
+                        "never" => PrimitiveType::Never,
+                        _ => unreachable!(),
+                    };
+                    Type::Primitive(primitive_type)
+                } else {
+                    // For non-primitive types, create a reference
+                    // This will be resolved by the TypeResolver later
+                    if let Some(params) = type_params {
+                        let param_types: Vec<_> = params.iter()
+                            .map(|p| self.type_annotation_to_type(p))
+                            .collect();
+                        Type::Reference {
+                            name: name.clone(),
+                            type_args: param_types,
+                        }
+                    } else {
+                        Type::Reference {
+                            name: name.clone(),
+                            type_args: vec![],
+                        }
+                    }
+                }
+            }
+            TypeAnnotation::ArrayType(elem) => {
+                Type::Array(Box::new(self.type_annotation_to_type(elem)))
+            }
+            TypeAnnotation::UnionType(types) => {
+                let union_types: Vec<_> = types.iter()
+                    .map(|t| self.type_annotation_to_type(t))
+                    .collect();
+                Type::Union(union_types)
+            }
+            TypeAnnotation::FunctionType { params, return_type } => {
+                let param_types: Vec<_> = params.iter()
+                    .map(|p| self.type_annotation_to_type(
+                        &p.type_annotation.clone().unwrap_or(TypeAnnotation::Unknown)
+                    ))
+                    .collect();
+                let return_ty = self.type_annotation_to_type(return_type);
+                Type::Function {
+                    params: param_types,
+                    return_type: Box::new(return_ty),
+                    type_params: vec![],
+                }
+            }
+            TypeAnnotation::Unknown => Type::Primitive(PrimitiveType::Unknown),
         }
     }
 
@@ -182,9 +260,28 @@ impl<'a> Visitor<'a> for ScopeAnalyzer<'a> {
 
     /// Visit a function declaration, creating a function scope and hoisting the function symbol.
     fn visit_function_declaration(&mut self, node: &'a AstNode<'a>) {
-        if let NodeKind::FunctionDeclaration { name, params: _, return_type: _, body: _ } = node.kind() {
-            // TODO: Extract type information from function signature
-            let type_id = None;
+        if let NodeKind::FunctionDeclaration { name, params, return_type, body: _ } = node.kind() {
+            // Build the function type from annotations
+            let param_types: Vec<_> = params.iter()
+                .map(|p| {
+                    let ann_ty = self.intern_type_annotation(&p.type_annotation);
+                    ann_ty.map(|id| self._type_interner.get(id).unwrap().clone())
+                        .unwrap_or_else(|| Type::Primitive(PrimitiveType::Unknown))
+                })
+                .collect();
+
+            let return_ty = self.intern_type_annotation(return_type)
+                .map(|id| Box::new(self._type_interner.get(id).unwrap().clone()));
+
+            let function_type = Type::Function {
+                params: param_types,
+                return_type: return_ty.unwrap_or_else(|| {
+                    Box::new(Type::Primitive(PrimitiveType::Unknown))
+                }),
+                type_params: vec![],
+            };
+
+            let type_id = Some(self._type_interner.intern(function_type));
 
             // Process function declaration (adds symbol to current scope and creates function scope)
             let (_, _function_scope) = self.process_function_declaration(
@@ -214,8 +311,8 @@ impl<'a> Visitor<'a> for ScopeAnalyzer<'a> {
                 // All variables use Variable kind for now - constness will be tracked in symbol flags
                 let kind = SymbolKind::Variable;
 
-                // TODO: Extract type information from type annotation
-                let type_id = None;
+                // Extract type information from type annotation
+                let type_id = self.intern_type_annotation(&decl.type_annotation);
 
                 self.declare_variable(
                     decl.name.clone(),

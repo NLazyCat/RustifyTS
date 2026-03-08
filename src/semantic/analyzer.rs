@@ -70,10 +70,15 @@ impl<'a> SemanticAnalyzer<'a> {
         module.scopes = scope_analyzer.scope_table;
         module.symbols = scope_analyzer.symbol_table;
 
+        // Transfer the type interner as well (it contains the interned types)
+        // We need to replace the analyzer's type_interner with a new one
+        // so that the module gets the types created during scope analysis
+        module.types = std::mem::replace(&mut self.type_interner, TypeInterner::new());
+
         // Pass 2: Type resolution
         // Resolve all type references in the AST
         let mut type_resolver = TypeResolver::new(
-            &module.symbols,
+            &mut module.symbols,
             &module.scopes,
             &mut self.type_interner,
             module.scopes.root(),

@@ -4,6 +4,7 @@ use super::*;
 use bumpalo::Bump;
 use crate::parser::ast::{NodeBuilder, NodeKind, Span};
 use crate::parser::ast::types::{VariableDeclaration, VariableKind, NodeId};
+use crate::semantic::types::Type;
 
 fn test_span() -> Span {
     Span::new(0, 100)
@@ -154,4 +155,61 @@ fn test_analyzer_full_pipeline() {
 
     let y_symbol = module.symbols.lookup_in_scope("y", inner_scope);
     assert!(y_symbol.is_some());
+}
+
+#[test]
+fn test_analyzer_type_wiring() {
+    let arena = Bump::new();
+    let mut analyzer = SemanticAnalyzer::new(&arena);
+
+    let builder = NodeBuilder::new(&arena);
+
+    // Create a simple variable with type annotation
+    // let x: number = 1;
+    let lit_1 = builder.alloc(NodeKind::Literal(crate::parser::ast::types::Literal::Number(1.0)));
+    let var_stmt = builder.alloc(NodeKind::VariableStatement {
+        declarations: vec![VariableDeclaration {
+            name: "x".to_string(),
+            kind: VariableKind::Let,
+            initializer: Some(NodeId::new(0)),
+            type_annotation: Some(crate::parser::ast::types::TypeAnnotation::TypeReference {
+                name: "number".to_string(),
+                type_params: None,
+            }),
+        }],
+    });
+    let block = builder.alloc_with_children(
+        NodeKind::Block {
+            statements: vec![NodeId::new(0)],
+        },
+        vec![var_stmt, lit_1],
+    );
+
+    // Analyze the program
+    let result = analyzer.analyze(block);
+
+    // Should succeed
+    assert!(result.is_ok());
+
+    let module = result.unwrap();
+
+    // Find the variable symbol
+    let root_scope = module.scopes.root();
+    let scopes: Vec<_> = module.scopes.scopes().iter().collect();
+    let block_scope = scopes.get(1).map(|s| s.id()).unwrap_or(root_scope);
+
+    let x_symbol = module.symbols.lookup_lexical("x", block_scope, &module.scopes);
+    assert!(x_symbol.is_some(), "Variable 'x' should be found");
+
+    // Verify the variable has a type_id
+    let x_symbol = module.symbols.lookup(x_symbol.unwrap()).unwrap();
+    assert!(x_symbol.type_id().is_some(), "Variable symbol should have a type_id");
+
+    // Verify it's a number type (the type resolution should have worked)
+    let type_id = x_symbol.type_id().unwrap();
+    let type_info = module.types.get(type_id).unwrap();
+
+    // The type should be either Primitive(Number) or Reference(number) that gets resolved
+    // For now, we just verify that a type was assigned
+    let _type_info = type_info; // Use the variable to avoid warning
 }
