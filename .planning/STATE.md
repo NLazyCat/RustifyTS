@@ -3,14 +3,14 @@
 ## Current Position
 
 **Phase:** 03-semantic
-**Plan:** 03-03a
+**Plan:** 03-02b
 **Status:** Complete
 
 ## Progress Bar
 
 ```
 [████████████████] 6/6 waves complete (100%) - Parser Phase
-[████████        ] 4/5 waves complete (80%) - Semantic Phase
+[████████████    ] 4/5 waves complete (80%) - Semantic Phase
 ```
 
 ### Completed Waves
@@ -67,22 +67,20 @@
   - Summary: 03-02a-SUMMARY.md
   - Status: Complete
 
-- [x] Wave 2: IR & CFG Construction (03-03a)
-  - Files: src/semantic/ir/**/*, src/semantic/flow/**/*
-  - Commits: f5e07d5, 59cceec, db49447, e825ced
-  - Summary: 03-03a-SUMMARY.md
+- [x] Wave 1: Analysis Implementations (Type Unification & Resolution)
+  - Files: src/semantic/types/unify.rs, src/semantic/types/resolver.rs
+  - Commit: 8c6c17b
+  - Summary: 03-02b-SUMMARY.md
   - Status: Complete
 
 ### Current Wave
 
-- [ ] Wave 3: Main Analyzer & Integration (03-03b)
+- [ ] Wave 2: IR & CFG Construction (03-03a)
   - Status: Not Started
-  - Prerequisites: Wave 2 IR & CFG complete
+  - Prerequisites: Wave 1 Analysis Implementations complete
 
 ### Remaining Waves
 
-- [ ] Wave 1: Core Data Structures (03-01a, 03-02a)
-- [ ] Wave 1: Analysis Implementations (03-01b, 03-02b)
 - [ ] Wave 2: IR & CFG Construction (03-03a)
 - [ ] Wave 3: Main Analyzer & Integration (03-03b)
 
@@ -164,6 +162,28 @@ None
    - Constness will be tracked in symbol flags in future iterations
    - Aligns with existing SymbolKind enum variants
 
+### Wave 1: Analysis Implementations (03-02b)
+
+1. **Union vs Union subtyping with special case handling**
+   - Added `(Type::Union, Type::Union)` match arm before general union cases
+   - Enables correct subtyping: `A | B <: C | D` if each Ai is subtype of some Bj
+   - Matches TypeScript semantics where narrower unions are subtypes of wider unions
+
+2. **PrimitiveType with Copy and Ord traits**
+   - Added `Copy` for by-value operations in sorting
+   - Implemented `PartialOrd` and `Ord` using discriminant-based ordering
+   - Ensures consistent sorting in union types
+
+3. **Type resolution with caching and cycle detection**
+   - `resolution_cache: FxHashMap<(String, ScopeId), TypeId>` for memoization
+   - `resolving: FxHashMap<String, ScopeId>` prevents infinite recursion
+   - Improves performance and ensures correctness
+
+4. **Generic type parameter substitution**
+   - `substitute_type_params()` recursively replaces type parameters
+   - Handles all type variants (arrays, tuples, objects, functions, unions, intersections)
+   - Uses `FxHashMap<TypeId, TypeId>` for substitution mapping
+
 ### Wave 2: IR & CFG Construction (03-03a)
 
 1. **ValueId and BasicBlockId as newtypes**
@@ -195,13 +215,13 @@ None
 
 None
 
-## Session: Wave 03-03a
+## Session: Wave 03-02b
 
 **Last session:** 2026-03-08
-**Stopped at:** Wave 2 complete, 03-03a-SUMMARY.md created
-**Duration:** 15 minutes
-**Commits:** 59cceec, db49447, e825ced
+**Stopped at:** Wave 1 complete, 03-02b-SUMMARY.md created
+**Duration:** 45 minutes
+**Commits:** 8c6c17b
 
 ## Last Commit
 
-**e825ced** - fix(03-semantic-03a): resolve borrow checker error in type resolver
+**8c6c17b** - feat(03-semantic-02b): implement type compatibility checking and resolution
