@@ -68,6 +68,10 @@ pub enum ParseError {
     /// Generic parse error with context
     #[error("Parse error: {0}")]
     Generic(String),
+
+    /// Runtime error (e.g., failed to create tokio runtime)
+    #[error("Runtime error: {0}")]
+    RuntimeError(String),
 }
 
 impl ParseError {

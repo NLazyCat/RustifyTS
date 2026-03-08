@@ -4,7 +4,7 @@
 //! Visitors enable analysis, transformation, and code generation operations
 //! by implementing custom logic for each node kind.
 
-use super::types::NodeKind;
+use super::types::{NodeKind, NodeId, BinaryOperator, Literal};
 use super::AstNode;
 
 /// Visitor trait for AST traversal
