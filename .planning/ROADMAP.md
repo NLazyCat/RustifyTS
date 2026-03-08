@@ -71,7 +71,7 @@ pub struct AstNode {
 ---
 
 ### Phase 03: 语义分析层
-**状态:** 🟡 Gap Closure (8 gap plans created, awaiting execution)
+**状态:** ✅ 完成 (6/6 waves 完成, 9/9 gap plans 完成)
 **目标:** 实现基础 IR 构建
 
 **Waves Progress:**
@@ -82,7 +82,7 @@ pub struct AstNode {
 - [x] Wave 2: Analysis Implementations (03-02b)
 - [x] Wave 3: Main Analyzer & Integration (03-03b)
 
-**Plans:** 15/15 plans complete
+**Plans:** 16/16 plans complete
 - [x] 03-00-PLAN.md — Test infrastructure and skeleton files (8c7096b)
 - [x] 03-01a-PLAN.md — Scope and Symbol data structures (7820cc5)
 - [x] 03-01b-PLAN.md — Symbol Table and Scope Analyzer (e49917f)
@@ -90,8 +90,6 @@ pub struct AstNode {
 - [x] 03-02b-PLAN.md — Type compatibility checking and resolution (8c6c17b)
 - [x] 03-03a-PLAN.md — IR and CFG implementation (5a0f3d1)
 - [x] 03-03b-PLAN.md — Main analyzer coordinator and integration (220fa29)
-
-**Gap Closure Plans (Awaiting Execution):**
 - [x] 03-GAP-01-PLAN.md — Type Unification Implementation (Complete - 31bf788)
 - [x] 03-GAP-02-PLAN.md — Type Assignability Check Implementation (Complete - b2c901e)
 - [x] 03-GAP-03-PLAN.md — CFG Integration into Main Analyzer (Complete - eb3c7a1)
@@ -100,6 +98,7 @@ pub struct AstNode {
 - [x] 03-GAP-06-PLAN.md — Class Type Information Extraction (Complete - a92c829)
 - [x] 03-GAP-07-PLAN.md — Generic Type Variance Support (Complete - efaaf6c, c004e73)
 - [x] 03-GAP-08-PLAN.md — Type Resolution Error Collection (Complete - c77b71e)
+- [x] 03-GAP-09-PLAN.md — Primitive Type Annotation Handling Fix (Complete - cf89509)
 
 **交付物:**
 - `src/semantic/mod.rs` - 模块接口
