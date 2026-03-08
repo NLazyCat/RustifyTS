@@ -27,6 +27,16 @@ pub struct ScopeAnalyzer<'a> {
     _type_interner: &'a mut TypeInterner,
 }
 
+/// Information about a function parameter extracted from the AST.
+#[derive(Debug, Clone)]
+struct ParameterInfo {
+    name: String,
+    type_annotation: Option<crate::parser::ast::types::TypeAnnotation>,
+    span: Span,
+    has_default: bool,
+    is_rest: bool,
+}
+
 impl<'a> ScopeAnalyzer<'a> {
     /// Create a new ScopeAnalyzer with the given root span.
     pub fn new(
@@ -39,6 +49,29 @@ impl<'a> ScopeAnalyzer<'a> {
             symbol_table: SymbolTable::new(),
             _arena: arena,
             _type_interner: type_interner,
+        }
+    }
+
+    /// Extract parameter information from a function node.
+    ///
+    /// Handles all function types: FunctionDeclaration, FunctionExpression, ArrowFunction.
+    /// Returns a vector of parameter information including name, type, span, and flags.
+    fn extract_parameters(&self, node: &'a AstNode<'a>) -> Vec<ParameterInfo> {
+        match node.kind() {
+            NodeKind::FunctionDeclaration { params, .. } |
+            NodeKind::FunctionExpression { params, .. } |
+            NodeKind::ArrowFunction { params, .. } => {
+                params.iter()
+                    .map(|param| ParameterInfo {
+                        name: param.name.clone(),
+                        type_annotation: param.type_annotation.clone(),
+                        span: Span::new(0, 0), // Will be filled in by caller
+                        has_default: param.default_value.is_some(),
+                        is_rest: param.is_rest,
+                    })
+                    .collect()
+            }
+            _ => vec![],
         }
     }
 
@@ -243,6 +276,26 @@ impl<'a> ScopeAnalyzer<'a> {
 
         (symbol_id, class_scope)
     }
+
+    /// Add function parameters to the current scope.
+    ///
+    /// Takes parameter information from the AST and creates symbols for each parameter
+    /// in the function scope. Handles type annotations and parameter flags.
+    fn add_parameters_to_scope(&mut self, params: Vec<ParameterInfo>) {
+        for param in params {
+            // Intern the type annotation if present
+            let type_id = self.intern_type_annotation(&param.type_annotation);
+
+            // Create a symbol for the parameter
+            self.symbol_table.insert(
+                param.name.clone(),
+                SymbolKind::Variable, // Parameters are variables in the function scope
+                param.span,
+                self.current_scope(),
+                type_id,
+            );
+        }
+    }
 }
 
 impl<'a> Visitor<'a> for ScopeAnalyzer<'a> {
@@ -290,7 +343,9 @@ impl<'a> Visitor<'a> for ScopeAnalyzer<'a> {
                 type_id,
             );
 
-            // TODO: Add function parameters to function scope
+            // Extract parameters and add them to the function scope
+            let param_infos = self.extract_parameters(node);
+            self.add_parameters_to_scope(param_infos);
 
             // Visit function body
             self.default_visit_node(node);
@@ -385,14 +440,31 @@ impl<'a> Visitor<'a> for ScopeAnalyzer<'a> {
             }
 
             // Handle catch clause if present
-            if let Some(_catch) = catch_clause {
+            if let Some(catch) = catch_clause {
                 // Create catch scope
                 let _catch_scope = self.push_scope(ScopeKind::Catch, self.get_span(node));
 
-                // TODO: Add the exception parameter to catch scope if present
-                // if let Some(var_id) = catch.variable {
-                //     // Get the variable node from children and add to catch scope
-                // }
+                // Add exception parameter to catch scope if present
+                if let Some(_var_node_id) = catch.variable {
+                    // Look for the catch parameter in children
+                    // The catch parameter is typically an Identifier node in the children
+                    // before the catch body
+                    for child in node.children() {
+                        if let NodeKind::Identifier { name } = child.kind() {
+                            // Create symbol for exception parameter with 'any' type
+                            let type_id = Some(self._type_interner.intern(Type::Primitive(PrimitiveType::Any)));
+
+                            self.symbol_table.insert(
+                                name.clone(),
+                                SymbolKind::Variable,
+                                self.get_span(child),
+                                self.current_scope(),
+                                type_id,
+                            );
+                            break;
+                        }
+                    }
+                }
 
                 // Visit catch body (second child is catch body)
                 if node.children().len() >= 2 {
@@ -438,7 +510,9 @@ impl<'a> Visitor<'a> for ScopeAnalyzer<'a> {
         // Create function scope for arrow function
         let _function_scope = self.push_scope(ScopeKind::Function, self.get_span(node));
 
-        // TODO: Add parameters to function scope
+        // Extract parameters and add them to the function scope
+        let param_infos = self.extract_parameters(node);
+        self.add_parameters_to_scope(param_infos);
 
         // Visit function body
         self.default_visit_node(node);
@@ -449,17 +523,33 @@ impl<'a> Visitor<'a> for ScopeAnalyzer<'a> {
 
     /// Visit a function expression, creating a function scope.
     fn visit_function_expression(&mut self, node: &'a AstNode<'a>) {
-        // Create function scope for function expression
-        let _function_scope = self.push_scope(ScopeKind::Function, self.get_span(node));
+        if let NodeKind::FunctionExpression { name, params, return_type: _, body: _ } = node.kind() {
+            // Create function scope for function expression
+            let _function_scope = self.push_scope(ScopeKind::Function, self.get_span(node));
 
-        // TODO: Add parameters to function scope
-        // TODO: Handle named function expressions (add name to function scope)
+            // If the function has a name, add it to the function scope
+            if let Some(func_name) = name {
+                self.symbol_table.insert(
+                    func_name.clone(),
+                    SymbolKind::Function,
+                    self.get_span(node),
+                    self.current_scope(),
+                    None, // Type will be inferred later
+                );
+            }
 
-        // Visit function body
-        self.default_visit_node(node);
+            // Extract parameters and add them to the function scope
+            let param_infos = self.extract_parameters(node);
+            self.add_parameters_to_scope(param_infos);
 
-        // Pop function scope
-        self.pop_scope();
+            // Visit function body
+            self.default_visit_node(node);
+
+            // Pop function scope
+            self.pop_scope();
+        } else {
+            self.default_visit_node(node);
+        }
     }
 }
 
@@ -468,7 +558,7 @@ mod tests {
     use super::*;
     use bumpalo::Bump;
     use crate::parser::ast::{NodeBuilder, Span};
-    use crate::parser::ast::types::{VariableDeclaration, VariableKind, NodeId};
+    use crate::parser::ast::types::{VariableDeclaration, VariableKind, NodeId, CatchClause};
     use crate::semantic::types::TypeInterner;
 
     fn test_span() -> Span {
@@ -685,5 +775,533 @@ mod tests {
         assert!(analyzer.symbol_table.lookup_in_scope("y", outer_block_scope).is_none());
         assert!(analyzer.symbol_table.lookup_in_scope("y", root_block_scope).is_none());
         assert!(analyzer.symbol_table.lookup_in_scope("y", root_scope).is_none());
+    }
+
+    #[test]
+    fn test_catch_parameter_in_scope() {
+        let arena = Bump::new();
+        let mut type_interner = TypeInterner::new();
+        let mut analyzer = ScopeAnalyzer::new(&arena, &mut type_interner, test_span());
+
+        let builder = NodeBuilder::new(&arena);
+
+        // Create AST: try { throw e; } catch (err) { console.log(err); }
+
+        // Literal: "error message"
+        let lit_msg = builder.alloc(NodeKind::Literal(crate::parser::ast::types::Literal::String("error".to_string())));
+
+        // Identifier: err
+        let err_ident = builder.alloc(NodeKind::Identifier { name: "err".to_string() });
+
+        // Try block: { throw "error"; }
+        let try_block = builder.alloc_with_children(
+            NodeKind::Block { statements: vec![] },
+            vec![lit_msg],
+        );
+
+        // Catch body: { console.log(err); }
+        let catch_body = builder.alloc_with_children(
+            NodeKind::Block { statements: vec![] },
+            vec![err_ident],
+        );
+
+        // Try statement with catch clause
+        let try_stmt = builder.alloc_with_children(
+            NodeKind::Try {
+                try_block: NodeId::new(0),
+                catch_clause: Some(CatchClause {
+                    variable: Some(NodeId::new(1)), // err_ident reference
+                    body: NodeId::new(1), // catch_body reference
+                }),
+                finally_block: None,
+            },
+            vec![try_block, err_ident, catch_body],
+        );
+
+        // Visit the try statement
+        analyzer.visit_node(try_stmt);
+
+        // Should have 3 scopes: root + catch
+        assert_eq!(analyzer.scope_table.scope_count(), 2);
+
+        // err should be in the catch scope
+        let root_scope = analyzer.scope_table.root();
+        let scopes: Vec<_> = analyzer.scope_table.scopes().iter().collect();
+        let catch_scope = scopes[1].id();
+
+        // err should be in catch scope, not root
+        assert!(analyzer.symbol_table.lookup_in_scope("err", root_scope).is_none());
+        assert!(analyzer.symbol_table.lookup_in_scope("err", catch_scope).is_some());
+    }
+
+    #[test]
+    fn test_catch_without_parameter() {
+        let arena = Bump::new();
+        let mut type_interner = TypeInterner::new();
+        let mut analyzer = ScopeAnalyzer::new(&arena, &mut type_interner, test_span());
+
+        let builder = NodeBuilder::new(&arena);
+
+        // Create AST: try { throw e; } catch { console.log("error"); }
+
+        // Try block: { throw "error"; }
+        let try_block = builder.alloc_with_children(
+            NodeKind::Block { statements: vec![] },
+            vec![],
+        );
+
+        // Catch body: { console.log("error"); }
+        let catch_body = builder.alloc_with_children(
+            NodeKind::Block { statements: vec![] },
+            vec![],
+        );
+
+        // Try statement with catch clause (no parameter)
+        let try_stmt = builder.alloc_with_children(
+            NodeKind::Try {
+                try_block: NodeId::new(0),
+                catch_clause: Some(CatchClause {
+                    variable: None, // No parameter
+                    body: NodeId::new(1),
+                }),
+                finally_block: None,
+            },
+            vec![try_block, catch_body],
+        );
+
+        // Visit the try statement
+        analyzer.visit_node(try_stmt);
+
+        // Should have 2 scopes: root + catch
+        assert_eq!(analyzer.scope_table.scope_count(), 2);
+
+        // No exception parameter should exist
+        let root_scope = analyzer.scope_table.root();
+        let catch_scope = analyzer.scope_table.scopes().iter().nth(1).unwrap().id();
+
+        // Catch scope exists but has no exception parameter
+        assert!(analyzer.symbol_table.lookup_in_scope("err", root_scope).is_none());
+        assert!(analyzer.symbol_table.lookup_in_scope("err", catch_scope).is_none());
+    }
+
+    #[test]
+    fn test_function_declaration_parameters() {
+        let arena = Bump::new();
+        let mut type_interner = TypeInterner::new();
+        let mut analyzer = ScopeAnalyzer::new(&arena, &mut type_interner, test_span());
+
+        let builder = NodeBuilder::new(&arena);
+
+        // Create AST: function add(x: number, y: number) { return x + y; }
+        let body_block = builder.alloc(NodeKind::Block { statements: vec![] });
+        let func_decl = builder.alloc_with_children(
+            NodeKind::FunctionDeclaration {
+                name: "add".to_string(),
+                params: vec![
+                    crate::parser::ast::types::Parameter {
+                        name: "x".to_string(),
+                        type_annotation: Some(crate::parser::ast::types::TypeAnnotation::TypeReference {
+                            name: "number".to_string(),
+                            type_params: None,
+                        }),
+                        default_value: None,
+                        is_rest: false,
+                    },
+                    crate::parser::ast::types::Parameter {
+                        name: "y".to_string(),
+                        type_annotation: Some(crate::parser::ast::types::TypeAnnotation::TypeReference {
+                            name: "number".to_string(),
+                            type_params: None,
+                        }),
+                        default_value: None,
+                        is_rest: false,
+                    },
+                ],
+                return_type: Some(crate::parser::ast::types::TypeAnnotation::TypeReference {
+                    name: "number".to_string(),
+                    type_params: None,
+                }),
+                body: NodeId::new(0),
+            },
+            vec![body_block],
+        );
+
+        // Visit the function
+        analyzer.visit_node(func_decl);
+
+        // Should have 2 scopes: root + function
+        assert_eq!(analyzer.scope_table.scope_count(), 2);
+
+        // Function 'add' should be in root scope
+        let root_scope = analyzer.scope_table.root();
+        assert!(analyzer.symbol_table.lookup_in_scope("add", root_scope).is_some());
+
+        // Parameters 'x' and 'y' should be in function scope
+        let scopes: Vec<_> = analyzer.scope_table.scopes().iter().collect();
+        let function_scope = scopes[1].id();
+
+        let x_symbol = analyzer.symbol_table.lookup_in_scope("x", function_scope);
+        assert!(x_symbol.is_some(), "Parameter 'x' should exist in function scope");
+
+        let y_symbol = analyzer.symbol_table.lookup_in_scope("y", function_scope);
+        assert!(y_symbol.is_some(), "Parameter 'y' should exist in function scope");
+
+        // Check that parameters are not in root scope
+        assert!(analyzer.symbol_table.lookup_in_scope("x", root_scope).is_none());
+        assert!(analyzer.symbol_table.lookup_in_scope("y", root_scope).is_none());
+    }
+
+    #[test]
+    fn test_arrow_function_parameters() {
+        let arena = Bump::new();
+        let mut type_interner = TypeInterner::new();
+        let mut analyzer = ScopeAnalyzer::new(&arena, &mut type_interner, test_span());
+
+        let builder = NodeBuilder::new(&arena);
+
+        // Create AST: const add = (x: number, y: number) => x + y;
+        let body_expr = builder.alloc(NodeKind::Identifier { name: "x".to_string() });
+        let arrow_func = builder.alloc_with_children(
+            NodeKind::ArrowFunction {
+                params: vec![
+                    crate::parser::ast::types::Parameter {
+                        name: "x".to_string(),
+                        type_annotation: Some(crate::parser::ast::types::TypeAnnotation::TypeReference {
+                            name: "number".to_string(),
+                            type_params: None,
+                        }),
+                        default_value: None,
+                        is_rest: false,
+                    },
+                    crate::parser::ast::types::Parameter {
+                        name: "y".to_string(),
+                        type_annotation: Some(crate::parser::ast::types::TypeAnnotation::TypeReference {
+                            name: "number".to_string(),
+                            type_params: None,
+                        }),
+                        default_value: None,
+                        is_rest: false,
+                    },
+                ],
+                return_type: None,
+                body: NodeId::new(0),
+            },
+            vec![body_expr],
+        );
+
+        // Visit the arrow function
+        analyzer.visit_node(arrow_func);
+
+        // Should have 2 scopes: root + function
+        assert_eq!(analyzer.scope_table.scope_count(), 2);
+
+        // Parameters 'x' and 'y' should be in function scope
+        let scopes: Vec<_> = analyzer.scope_table.scopes().iter().collect();
+        let function_scope = scopes[1].id();
+
+        let x_symbol = analyzer.symbol_table.lookup_in_scope("x", function_scope);
+        assert!(x_symbol.is_some(), "Parameter 'x' should exist in arrow function scope");
+
+        let y_symbol = analyzer.symbol_table.lookup_in_scope("y", function_scope);
+        assert!(y_symbol.is_some(), "Parameter 'y' should exist in arrow function scope");
+    }
+
+    #[test]
+    fn test_function_expression_parameters() {
+        let arena = Bump::new();
+        let mut type_interner = TypeInterner::new();
+        let mut analyzer = ScopeAnalyzer::new(&arena, &mut type_interner, test_span());
+
+        let builder = NodeBuilder::new(&arena);
+
+        // Create AST: const add = function(x: number, y: number) { return x + y; };
+        let body_block = builder.alloc(NodeKind::Block { statements: vec![] });
+        let func_expr = builder.alloc_with_children(
+            NodeKind::FunctionExpression {
+                name: None,
+                params: vec![
+                    crate::parser::ast::types::Parameter {
+                        name: "x".to_string(),
+                        type_annotation: Some(crate::parser::ast::types::TypeAnnotation::TypeReference {
+                            name: "number".to_string(),
+                            type_params: None,
+                        }),
+                        default_value: None,
+                        is_rest: false,
+                    },
+                    crate::parser::ast::types::Parameter {
+                        name: "y".to_string(),
+                        type_annotation: Some(crate::parser::ast::types::TypeAnnotation::TypeReference {
+                            name: "number".to_string(),
+                            type_params: None,
+                        }),
+                        default_value: None,
+                        is_rest: false,
+                    },
+                ],
+                return_type: None,
+                body: NodeId::new(0),
+            },
+            vec![body_block],
+        );
+
+        // Visit the function expression
+        analyzer.visit_node(func_expr);
+
+        // Should have 2 scopes: root + function
+        assert_eq!(analyzer.scope_table.scope_count(), 2);
+
+        // Parameters 'x' and 'y' should be in function scope
+        let scopes: Vec<_> = analyzer.scope_table.scopes().iter().collect();
+        let function_scope = scopes[1].id();
+
+        let x_symbol = analyzer.symbol_table.lookup_in_scope("x", function_scope);
+        assert!(x_symbol.is_some(), "Parameter 'x' should exist in function expression scope");
+
+        let y_symbol = analyzer.symbol_table.lookup_in_scope("y", function_scope);
+        assert!(y_symbol.is_some(), "Parameter 'y' should exist in function expression scope");
+    }
+
+    #[test]
+    fn test_named_function_expression() {
+        let arena = Bump::new();
+        let mut type_interner = TypeInterner::new();
+        let mut analyzer = ScopeAnalyzer::new(&arena, &mut type_interner, test_span());
+
+        let builder = NodeBuilder::new(&arena);
+
+        // Create AST: const add = function add(x: number, y: number) { return x + y; };
+        let body_block = builder.alloc(NodeKind::Block { statements: vec![] });
+        let func_expr = builder.alloc_with_children(
+            NodeKind::FunctionExpression {
+                name: Some("add".to_string()),
+                params: vec![
+                    crate::parser::ast::types::Parameter {
+                        name: "x".to_string(),
+                        type_annotation: Some(crate::parser::ast::types::TypeAnnotation::TypeReference {
+                            name: "number".to_string(),
+                            type_params: None,
+                        }),
+                        default_value: None,
+                        is_rest: false,
+                    },
+                ],
+                return_type: None,
+                body: NodeId::new(0),
+            },
+            vec![body_block],
+        );
+
+        // Visit the function expression
+        analyzer.visit_node(func_expr);
+
+        // Should have 2 scopes: root + function
+        assert_eq!(analyzer.scope_table.scope_count(), 2);
+
+        let scopes: Vec<_> = analyzer.scope_table.scopes().iter().collect();
+        let function_scope = scopes[1].id();
+
+        // The function name 'add' should be in the function scope
+        let add_symbol = analyzer.symbol_table.lookup_in_scope("add", function_scope);
+        assert!(add_symbol.is_some(), "Function name 'add' should exist in function scope");
+        assert_eq!(add_symbol.unwrap().kind(), SymbolKind::Function);
+
+        // Parameter 'x' should also be in function scope
+        let x_symbol = analyzer.symbol_table.lookup_in_scope("x", function_scope);
+        assert!(x_symbol.is_some(), "Parameter 'x' should exist in function scope");
+    }
+
+    #[test]
+    fn test_rest_parameter() {
+        let arena = Bump::new();
+        let mut type_interner = TypeInterner::new();
+        let mut analyzer = ScopeAnalyzer::new(&arena, &mut type_interner, test_span());
+
+        let builder = NodeBuilder::new(&arena);
+
+        // Create AST: function sum(...args: number[]) { return args.reduce((a, b) => a + b, 0); }
+        let body_block = builder.alloc(NodeKind::Block { statements: vec![] });
+        let func_decl = builder.alloc_with_children(
+            NodeKind::FunctionDeclaration {
+                name: "sum".to_string(),
+                params: vec![
+                    crate::parser::ast::types::Parameter {
+                        name: "args".to_string(),
+                        type_annotation: Some(crate::parser::ast::types::TypeAnnotation::ArrayType(
+                            Box::new(crate::parser::ast::types::TypeAnnotation::TypeReference {
+                                name: "number".to_string(),
+                                type_params: None,
+                            })
+                        )),
+                        default_value: None,
+                        is_rest: true,
+                    },
+                ],
+                return_type: None,
+                body: NodeId::new(0),
+            },
+            vec![body_block],
+        );
+
+        // Visit the function
+        analyzer.visit_node(func_decl);
+
+        // Rest parameter 'args' should be in function scope
+        let scopes: Vec<_> = analyzer.scope_table.scopes().iter().collect();
+        let function_scope = scopes[1].id();
+
+        let args_symbol = analyzer.symbol_table.lookup_in_scope("args", function_scope);
+        assert!(args_symbol.is_some(), "Rest parameter 'args' should exist in function scope");
+    }
+
+    #[test]
+    fn test_default_parameter() {
+        let arena = Bump::new();
+        let mut type_interner = TypeInterner::new();
+        let mut analyzer = ScopeAnalyzer::new(&arena, &mut type_interner, test_span());
+
+        let builder = NodeBuilder::new(&arena);
+
+        // Create AST: function greet(name: string = "World") { return "Hello, " + name; }
+        let body_block = builder.alloc(NodeKind::Block { statements: vec![] });
+        let default_value = builder.alloc(NodeKind::Literal(crate::parser::ast::types::Literal::String("World".to_string())));
+        let func_decl = builder.alloc_with_children(
+            NodeKind::FunctionDeclaration {
+                name: "greet".to_string(),
+                params: vec![
+                    crate::parser::ast::types::Parameter {
+                        name: "name".to_string(),
+                        type_annotation: Some(crate::parser::ast::types::TypeAnnotation::TypeReference {
+                            name: "string".to_string(),
+                            type_params: None,
+                        }),
+                        default_value: Some(NodeId::new(0)),
+                        is_rest: false,
+                    },
+                ],
+                return_type: None,
+                body: NodeId::new(1), // body_block is second child (index 1)
+            },
+            vec![default_value, body_block],
+        );
+
+        // Visit the function
+        analyzer.visit_node(func_decl);
+
+        // Parameter 'name' with default value should be in function scope
+        let scopes: Vec<_> = analyzer.scope_table.scopes().iter().collect();
+        let function_scope = scopes[1].id();
+
+        let name_symbol = analyzer.symbol_table.lookup_in_scope("name", function_scope);
+        assert!(name_symbol.is_some(), "Parameter 'name' with default value should exist in function scope");
+    }
+
+    #[test]
+    fn test_parameter_type_annotation() {
+        let arena = Bump::new();
+        let mut type_interner = TypeInterner::new();
+        let mut analyzer = ScopeAnalyzer::new(&arena, &mut type_interner, test_span());
+
+        let builder = NodeBuilder::new(&arena);
+
+        // Create AST: function foo(x: number, y: string): boolean { return true; }
+        let body_block = builder.alloc(NodeKind::Block { statements: vec![] });
+        let func_decl = builder.alloc_with_children(
+            NodeKind::FunctionDeclaration {
+                name: "foo".to_string(),
+                params: vec![
+                    crate::parser::ast::types::Parameter {
+                        name: "x".to_string(),
+                        type_annotation: Some(crate::parser::ast::types::TypeAnnotation::TypeReference {
+                            name: "number".to_string(),
+                            type_params: None,
+                        }),
+                        default_value: None,
+                        is_rest: false,
+                    },
+                    crate::parser::ast::types::Parameter {
+                        name: "y".to_string(),
+                        type_annotation: Some(crate::parser::ast::types::TypeAnnotation::TypeReference {
+                            name: "string".to_string(),
+                            type_params: None,
+                        }),
+                        default_value: None,
+                        is_rest: false,
+                    },
+                ],
+                return_type: Some(crate::parser::ast::types::TypeAnnotation::TypeReference {
+                    name: "boolean".to_string(),
+                    type_params: None,
+                }),
+                body: NodeId::new(0),
+            },
+            vec![body_block],
+        );
+
+        // Visit the function
+        analyzer.visit_node(func_decl);
+
+        // Check that parameters have type annotations
+        let scopes: Vec<_> = analyzer.scope_table.scopes().iter().collect();
+        let function_scope = scopes[1].id();
+
+        let x_symbol = analyzer.symbol_table.lookup_in_scope("x", function_scope);
+        assert!(x_symbol.is_some());
+        let x_type_id = x_symbol.unwrap().type_id();
+        assert!(x_type_id.is_some(), "Parameter 'x' should have a type annotation");
+
+        let y_symbol = analyzer.symbol_table.lookup_in_scope("y", function_scope);
+        assert!(y_symbol.is_some());
+        let y_type_id = y_symbol.unwrap().type_id();
+        assert!(y_type_id.is_some(), "Parameter 'y' should have a type annotation");
+
+        // Verify the types are correct
+        let x_type = type_interner.get(x_type_id.unwrap()).unwrap();
+        assert!(matches!(x_type, Type::Primitive(PrimitiveType::Number)));
+
+        let y_type = type_interner.get(y_type_id.unwrap()).unwrap();
+        assert!(matches!(y_type, Type::Primitive(PrimitiveType::String)));
+    }
+
+    #[test]
+    fn test_untyped_parameter() {
+        let arena = Bump::new();
+        let mut type_interner = TypeInterner::new();
+        let mut analyzer = ScopeAnalyzer::new(&arena, &mut type_interner, test_span());
+
+        let builder = NodeBuilder::new(&arena);
+
+        // Create AST: function bar(x) { return x; }
+        let body_block = builder.alloc(NodeKind::Block { statements: vec![] });
+        let func_decl = builder.alloc_with_children(
+            NodeKind::FunctionDeclaration {
+                name: "bar".to_string(),
+                params: vec![
+                    crate::parser::ast::types::Parameter {
+                        name: "x".to_string(),
+                        type_annotation: None,
+                        default_value: None,
+                        is_rest: false,
+                    },
+                ],
+                return_type: None,
+                body: NodeId::new(0),
+            },
+            vec![body_block],
+        );
+
+        // Visit the function
+        analyzer.visit_node(func_decl);
+
+        // Parameter 'x' without type annotation should still be in function scope
+        let scopes: Vec<_> = analyzer.scope_table.scopes().iter().collect();
+        let function_scope = scopes[1].id();
+
+        let x_symbol = analyzer.symbol_table.lookup_in_scope("x", function_scope);
+        assert!(x_symbol.is_some(), "Untyped parameter 'x' should exist in function scope");
+
+        // The type should be None (no annotation)
+        let x_type_id = x_symbol.unwrap().type_id();
+        assert!(x_type_id.is_none(), "Untyped parameter should not have a type annotation");
     }
 }
