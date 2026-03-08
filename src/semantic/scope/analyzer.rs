@@ -5,10 +5,11 @@
 use super::{ScopeId, ScopeKind, ScopeTable};
 use crate::parser::ast::visitor::Visitor;
 use crate::parser::ast::{AstNode, NodeKind, Span};
-use crate::parser::ast::types::{VariableKind, TypeAnnotation};
+use crate::parser::ast::types::{VariableKind, TypeAnnotation, ClassMember};
 use crate::semantic::symbol::{SymbolId, SymbolKind, SymbolTable};
-use crate::semantic::types::{TypeId, TypeInterner, Type, PrimitiveType};
+use crate::semantic::types::{TypeId, TypeInterner, Type, PrimitiveType, ObjectType};
 use bumpalo::Bump;
+use fxhash::FxHashMap;
 
 /// Scope analyzer visitor that builds the scope hierarchy and populates the symbol table.
 ///
@@ -24,7 +25,7 @@ pub struct ScopeAnalyzer<'a> {
     /// Bump allocator for AST nodes
     _arena: &'a Bump,
     /// Type interner for type lookups and creation
-    _type_interner: &'a mut TypeInterner,
+    type_interner: &'a mut TypeInterner,
 }
 
 /// Information about a function parameter extracted from the AST.
@@ -35,6 +36,25 @@ struct ParameterInfo {
     span: Span,
     has_default: bool,
     is_rest: bool,
+}
+
+/// Information about a class member extracted from the AST.
+#[derive(Debug, Clone)]
+struct ClassMemberInfo {
+    name: String,
+    type_id: Option<TypeId>,
+    is_static: bool,
+    member_kind: ClassMemberKind,
+}
+
+/// The kind of class member.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ClassMemberKind {
+    Property,
+    Method,
+    Constructor,
+    Getter,
+    Setter,
 }
 
 impl<'a> ScopeAnalyzer<'a> {
@@ -48,7 +68,7 @@ impl<'a> ScopeAnalyzer<'a> {
             scope_table: ScopeTable::new(root_span),
             symbol_table: SymbolTable::new(),
             _arena: arena,
-            _type_interner: type_interner,
+            type_interner: type_interner,
         }
     }
 
@@ -75,6 +95,159 @@ impl<'a> ScopeAnalyzer<'a> {
         }
     }
 
+    /// Extract class member information from a class declaration node.
+    ///
+    /// Parses the class body and extracts information about all members
+    /// including properties, methods, constructor, getters, and setters.
+    /// Returns a vector of member information with types and flags.
+    fn extract_class_members(&mut self, node: &'a AstNode<'a>) -> Vec<ClassMemberInfo> {
+        if let NodeKind::ClassDeclaration { name: _, extends: _, members } = node.kind() {
+            let mut member_infos = Vec::new();
+
+            for member in members {
+                match member {
+                    ClassMember::Property { name, type_annotation, is_static, is_readonly: _, value: _ } => {
+                        // Intern the type annotation if present
+                        let type_id = self.intern_type_annotation(type_annotation);
+
+                        member_infos.push(ClassMemberInfo {
+                            name: name.clone(),
+                            type_id,
+                            is_static: *is_static,
+                            member_kind: ClassMemberKind::Property,
+                        });
+                    }
+                    ClassMember::Method { name, params, return_type, is_static, body: _ } => {
+                        // Create function type for method
+                        let param_types: Vec<_> = params.iter()
+                            .map(|p| self.type_annotation_to_type(
+                                &p.type_annotation.clone().unwrap_or(TypeAnnotation::Unknown)
+                            ))
+                            .collect();
+                        let return_ty = self.type_annotation_to_type(
+                            return_type.as_ref().unwrap_or(&TypeAnnotation::Unknown)
+                        );
+
+                        let function_type = Type::Function {
+                            params: param_types,
+                            return_type: Box::new(return_ty),
+                            type_params: vec![],
+                        };
+
+                        // Intern the function type
+                        let type_id = Some(self.type_interner.intern(function_type));
+
+                        member_infos.push(ClassMemberInfo {
+                            name: name.clone(),
+                            type_id,
+                            is_static: *is_static,
+                            member_kind: ClassMemberKind::Method,
+                        });
+                    }
+                    ClassMember::Constructor { params, body: _ } => {
+                        // Create function type for constructor (returns void)
+                        let param_types: Vec<_> = params.iter()
+                            .map(|p| self.type_annotation_to_type(
+                                &p.type_annotation.clone().unwrap_or(TypeAnnotation::Unknown)
+                            ))
+                            .collect();
+
+                        let function_type = Type::Function {
+                            params: param_types,
+                            return_type: Box::new(Type::Primitive(PrimitiveType::Void)),
+                            type_params: vec![],
+                        };
+
+                        // Intern the function type
+                        let type_id = Some(self.type_interner.intern(function_type));
+
+                        member_infos.push(ClassMemberInfo {
+                            name: "constructor".to_string(),
+                            type_id,
+                            is_static: false,
+                            member_kind: ClassMemberKind::Constructor,
+                        });
+                    }
+                    ClassMember::Getter { name, return_type, body: _ } => {
+                        // Create function type for getter (no params, returns property type)
+                        let return_ty = self.type_annotation_to_type(
+                            return_type.as_ref().unwrap_or(&TypeAnnotation::Unknown)
+                        );
+
+                        let function_type = Type::Function {
+                            params: vec![],
+                            return_type: Box::new(return_ty),
+                            type_params: vec![],
+                        };
+
+                        // Intern the function type
+                        let type_id = Some(self.type_interner.intern(function_type));
+
+                        member_infos.push(ClassMemberInfo {
+                            name: name.clone(),
+                            type_id,
+                            is_static: false,
+                            member_kind: ClassMemberKind::Getter,
+                        });
+                    }
+                    ClassMember::Setter { name, params, body: _ } => {
+                        // Create function type for setter (one param, returns void)
+                        let param_types: Vec<_> = params.iter()
+                            .take(1) // Setters have exactly one parameter
+                            .map(|p| self.type_annotation_to_type(
+                                &p.type_annotation.clone().unwrap_or(TypeAnnotation::Unknown)
+                            ))
+                            .collect();
+
+                        let function_type = Type::Function {
+                            params: param_types,
+                            return_type: Box::new(Type::Primitive(PrimitiveType::Void)),
+                            type_params: vec![],
+                        };
+
+                        // Intern the function type
+                        let type_id = Some(self.type_interner.intern(function_type));
+
+                        member_infos.push(ClassMemberInfo {
+                            name: name.clone(),
+                            type_id,
+                            is_static: false,
+                            member_kind: ClassMemberKind::Setter,
+                        });
+                    }
+                }
+            }
+
+            member_infos
+        } else {
+            vec![]
+        }
+    }
+
+    /// Create an ObjectType from class members.
+    ///
+    /// Takes class member information and creates an ObjectType representation
+    /// with properties and methods. Static members are excluded from the instance type.
+    fn create_class_type(&self, members: &[ClassMemberInfo]) -> ObjectType {
+        let mut properties = FxHashMap::default();
+
+        for member in members {
+            // Only include instance members (non-static)
+            if !member.is_static {
+                if let Some(type_id) = member.type_id {
+                    if let Some(ty) = self.type_interner.get(type_id) {
+                        properties.insert(member.name.clone(), ty.clone());
+                    }
+                }
+            }
+        }
+
+        ObjectType {
+            properties,
+            index_signature: None, // Index signatures not supported yet
+        }
+    }
+
     /// Get the span from a node or return a default span.
     #[inline]
     fn get_span(&self, node: &'a AstNode<'a>) -> Span {
@@ -92,7 +265,7 @@ impl<'a> ScopeAnalyzer<'a> {
     fn intern_type_annotation(&mut self, annotation: &Option<TypeAnnotation>) -> Option<TypeId> {
         annotation.as_ref().map(|ann| {
             let ty = self.type_annotation_to_type(ann);
-            self._type_interner.intern(ty)
+            self.type_interner.intern(ty)
         })
     }
 
@@ -318,13 +491,13 @@ impl<'a> Visitor<'a> for ScopeAnalyzer<'a> {
             let param_types: Vec<_> = params.iter()
                 .map(|p| {
                     let ann_ty = self.intern_type_annotation(&p.type_annotation);
-                    ann_ty.map(|id| self._type_interner.get(id).unwrap().clone())
+                    ann_ty.map(|id| self.type_interner.get(id).unwrap().clone())
                         .unwrap_or_else(|| Type::Primitive(PrimitiveType::Unknown))
                 })
                 .collect();
 
             let return_ty = self.intern_type_annotation(return_type)
-                .map(|id| Box::new(self._type_interner.get(id).unwrap().clone()));
+                .map(|id| Box::new(self.type_interner.get(id).unwrap().clone()));
 
             let function_type = Type::Function {
                 params: param_types,
@@ -334,7 +507,7 @@ impl<'a> Visitor<'a> for ScopeAnalyzer<'a> {
                 type_params: vec![],
             };
 
-            let type_id = Some(self._type_interner.intern(function_type));
+            let type_id = Some(self.type_interner.intern(function_type));
 
             // Process function declaration (adds symbol to current scope and creates function scope)
             let (_, _function_scope) = self.process_function_declaration(
@@ -453,7 +626,7 @@ impl<'a> Visitor<'a> for ScopeAnalyzer<'a> {
                     for child in node.children() {
                         if let NodeKind::Identifier { name } = child.kind() {
                             // Create symbol for exception parameter with 'any' type
-                            let type_id = Some(self._type_interner.intern(Type::Primitive(PrimitiveType::Any)));
+                            let type_id = Some(self.type_interner.intern(Type::Primitive(PrimitiveType::Any)));
                             let current_scope = self.current_scope();
 
                             let symbol_id = self.symbol_table.insert(
@@ -488,8 +661,14 @@ impl<'a> Visitor<'a> for ScopeAnalyzer<'a> {
     /// Visit a class declaration, creating a class scope.
     fn visit_class_declaration(&mut self, node: &'a AstNode<'a>) {
         if let NodeKind::ClassDeclaration { name, extends: _, members: _ } = node.kind() {
-            // TODO: Extract type information from class
-            let type_id = None;
+            // Extract type information from class members
+            let members = self.extract_class_members(node);
+
+            // Create ObjectType from class members (instance type)
+            let object_type = self.create_class_type(&members);
+
+            // Intern the class type
+            let type_id = Some(self.type_interner.intern(Type::Object(object_type)));
 
             // Process class declaration (adds symbol to current scope and creates class scope)
             let (_, _class_scope) = self.process_class_declaration(
@@ -562,7 +741,7 @@ mod tests {
     use super::*;
     use bumpalo::Bump;
     use crate::parser::ast::{NodeBuilder, Span};
-    use crate::parser::ast::types::{VariableDeclaration, VariableKind, NodeId, CatchClause};
+    use crate::parser::ast::types::{VariableDeclaration, VariableKind, NodeId, CatchClause, ClassMember, Parameter};
     use crate::semantic::types::TypeInterner;
 
     fn test_span() -> Span {
@@ -1320,5 +1499,283 @@ mod tests {
         let x_symbol_data = &analyzer.symbol_table.symbols()[x_symbol_id.get() as usize];
         let x_type_id = x_symbol_data.type_id();
         assert!(x_type_id.is_none(), "Untyped parameter should not have a type annotation");
+    }
+
+    #[test]
+    fn test_class_type_extraction() {
+        let arena = Bump::new();
+        let mut type_interner = TypeInterner::new();
+        let mut analyzer = ScopeAnalyzer::new(&arena, &mut type_interner, test_span());
+
+        let builder = NodeBuilder::new(&arena);
+
+        // Create AST: class Person { name: string; age: number; }
+        let body_block = builder.alloc(NodeKind::Block { statements: vec![] });
+        let class_decl = builder.alloc_with_children(
+            NodeKind::ClassDeclaration {
+                name: "Person".to_string(),
+                extends: None,
+                members: vec![
+                    ClassMember::Property {
+                        name: "name".to_string(),
+                        value: None,
+                        type_annotation: Some(crate::parser::ast::types::TypeAnnotation::TypeReference {
+                            name: "string".to_string(),
+                            type_params: None,
+                        }),
+                        is_static: false,
+                        is_readonly: false,
+                    },
+                    ClassMember::Property {
+                        name: "age".to_string(),
+                        value: None,
+                        type_annotation: Some(crate::parser::ast::types::TypeAnnotation::TypeReference {
+                            name: "number".to_string(),
+                            type_params: None,
+                        }),
+                        is_static: false,
+                        is_readonly: false,
+                    },
+                ],
+            },
+            vec![body_block],
+        );
+
+        // Visit the class
+        analyzer.visit_node(class_decl);
+
+        // Class symbol should have type information
+        let root_scope = analyzer.scope_table.root();
+        let person_symbol = analyzer.symbol_table.lookup_in_scope("Person", root_scope);
+        assert!(person_symbol.is_some(), "Person class should exist in root scope");
+
+        let person_symbol_id = person_symbol.unwrap();
+        let person_symbol_data = &analyzer.symbol_table.symbols()[person_symbol_id.get() as usize];
+        let person_type_id = person_symbol_data.type_id();
+        assert!(person_type_id.is_some(), "Person class should have type information");
+
+        // Verify the type is an Object with correct properties
+        let person_type = type_interner.get(person_type_id.unwrap()).unwrap();
+        match person_type {
+            Type::Object(object_type) => {
+                assert_eq!(object_type.properties.len(), 2, "Should have 2 properties");
+                assert!(object_type.properties.contains_key("name"), "Should have 'name' property");
+                assert!(object_type.properties.contains_key("age"), "Should have 'age' property");
+            }
+            _ => panic!("Person type should be Object type"),
+        }
+    }
+
+    #[test]
+    fn test_class_with_methods() {
+        let arena = Bump::new();
+        let mut type_interner = TypeInterner::new();
+        let mut analyzer = ScopeAnalyzer::new(&arena, &mut type_interner, test_span());
+
+        let builder = NodeBuilder::new(&arena);
+
+        // Create AST: class Calculator { add(a: number, b: number): number; }
+        let method_body = builder.alloc(NodeKind::Block { statements: vec![] });
+        let class_body = builder.alloc_with_children(
+            NodeKind::Block { statements: vec![] },
+            vec![method_body],
+        );
+        let class_decl = builder.alloc_with_children(
+            NodeKind::ClassDeclaration {
+                name: "Calculator".to_string(),
+                extends: None,
+                members: vec![
+                    ClassMember::Method {
+                        name: "add".to_string(),
+                        params: vec![
+                            Parameter {
+                                name: "a".to_string(),
+                                type_annotation: Some(crate::parser::ast::types::TypeAnnotation::TypeReference {
+                                    name: "number".to_string(),
+                                    type_params: None,
+                                }),
+                                default_value: None,
+                                is_rest: false,
+                            },
+                            Parameter {
+                                name: "b".to_string(),
+                                type_annotation: Some(crate::parser::ast::types::TypeAnnotation::TypeReference {
+                                    name: "number".to_string(),
+                                    type_params: None,
+                                }),
+                                default_value: None,
+                                is_rest: false,
+                            },
+                        ],
+                        return_type: Some(crate::parser::ast::types::TypeAnnotation::TypeReference {
+                            name: "number".to_string(),
+                            type_params: None,
+                        }),
+                        body: NodeId::new(0),
+                        is_static: false,
+                    },
+                ],
+            },
+            vec![class_body],
+        );
+
+        // Visit the class
+        analyzer.visit_node(class_decl);
+
+        // Class symbol should have type information
+        let root_scope = analyzer.scope_table.root();
+        let calc_symbol = analyzer.symbol_table.lookup_in_scope("Calculator", root_scope);
+        assert!(calc_symbol.is_some(), "Calculator class should exist in root scope");
+
+        let calc_symbol_id = calc_symbol.unwrap();
+        let calc_symbol_data = &analyzer.symbol_table.symbols()[calc_symbol_id.get() as usize];
+        let calc_type_id = calc_symbol_data.type_id();
+        assert!(calc_type_id.is_some(), "Calculator class should have type information");
+
+        // Verify the type is an Object with the method
+        let calc_type = type_interner.get(calc_type_id.unwrap()).unwrap();
+        match calc_type {
+            Type::Object(object_type) => {
+                assert_eq!(object_type.properties.len(), 1, "Should have 1 property (method)");
+                assert!(object_type.properties.contains_key("add"), "Should have 'add' method");
+            }
+            _ => panic!("Calculator type should be Object type"),
+        }
+    }
+
+    #[test]
+    fn test_class_with_static_members() {
+        let arena = Bump::new();
+        let mut type_interner = TypeInterner::new();
+        let mut analyzer = ScopeAnalyzer::new(&arena, &mut type_interner, test_span());
+
+        let builder = NodeBuilder::new(&arena);
+
+        // Create AST: class Counter { static count: number; value: number; }
+        let body_block = builder.alloc(NodeKind::Block { statements: vec![] });
+        let class_decl = builder.alloc_with_children(
+            NodeKind::ClassDeclaration {
+                name: "Counter".to_string(),
+                extends: None,
+                members: vec![
+                    ClassMember::Property {
+                        name: "count".to_string(),
+                        value: None,
+                        type_annotation: Some(crate::parser::ast::types::TypeAnnotation::TypeReference {
+                            name: "number".to_string(),
+                            type_params: None,
+                        }),
+                        is_static: true,
+                        is_readonly: false,
+                    },
+                    ClassMember::Property {
+                        name: "value".to_string(),
+                        value: None,
+                        type_annotation: Some(crate::parser::ast::types::TypeAnnotation::TypeReference {
+                            name: "number".to_string(),
+                            type_params: None,
+                        }),
+                        is_static: false,
+                        is_readonly: false,
+                    },
+                ],
+            },
+            vec![body_block],
+        );
+
+        // Visit the class
+        analyzer.visit_node(class_decl);
+
+        // Class symbol should have type information
+        let root_scope = analyzer.scope_table.root();
+        let counter_symbol = analyzer.symbol_table.lookup_in_scope("Counter", root_scope);
+        assert!(counter_symbol.is_some(), "Counter class should exist in root scope");
+
+        let counter_symbol_id = counter_symbol.unwrap();
+        let counter_symbol_data = &analyzer.symbol_table.symbols()[counter_symbol_id.get() as usize];
+        let counter_type_id = counter_symbol_data.type_id();
+        assert!(counter_type_id.is_some(), "Counter class should have type information");
+
+        // Verify the type is an Object with only instance members (static excluded)
+        let counter_type = type_interner.get(counter_type_id.unwrap()).unwrap();
+        match counter_type {
+            Type::Object(object_type) => {
+                assert_eq!(object_type.properties.len(), 1, "Should have 1 instance property");
+                assert!(object_type.properties.contains_key("value"), "Should have 'value' property");
+                assert!(!object_type.properties.contains_key("count"), "Should not have static 'count' property in instance type");
+            }
+            _ => panic!("Counter type should be Object type"),
+        }
+    }
+
+    #[test]
+    fn test_class_with_constructor() {
+        let arena = Bump::new();
+        let mut type_interner = TypeInterner::new();
+        let mut analyzer = ScopeAnalyzer::new(&arena, &mut type_interner, test_span());
+
+        let builder = NodeBuilder::new(&arena);
+
+        // Create AST: class Point { constructor(x: number, y: number); }
+        let constructor_body = builder.alloc(NodeKind::Block { statements: vec![] });
+        let class_body = builder.alloc_with_children(
+            NodeKind::Block { statements: vec![] },
+            vec![constructor_body],
+        );
+        let class_decl = builder.alloc_with_children(
+            NodeKind::ClassDeclaration {
+                name: "Point".to_string(),
+                extends: None,
+                members: vec![
+                    ClassMember::Constructor {
+                        params: vec![
+                            Parameter {
+                                name: "x".to_string(),
+                                type_annotation: Some(crate::parser::ast::types::TypeAnnotation::TypeReference {
+                                    name: "number".to_string(),
+                                    type_params: None,
+                                }),
+                                default_value: None,
+                                is_rest: false,
+                            },
+                            Parameter {
+                                name: "y".to_string(),
+                                type_annotation: Some(crate::parser::ast::types::TypeAnnotation::TypeReference {
+                                    name: "number".to_string(),
+                                    type_params: None,
+                                }),
+                                default_value: None,
+                                is_rest: false,
+                            },
+                        ],
+                        body: NodeId::new(0),
+                    },
+                ],
+            },
+            vec![class_body],
+        );
+
+        // Visit the class
+        analyzer.visit_node(class_decl);
+
+        // Class symbol should have type information
+        let root_scope = analyzer.scope_table.root();
+        let point_symbol = analyzer.symbol_table.lookup_in_scope("Point", root_scope);
+        assert!(point_symbol.is_some(), "Point class should exist in root scope");
+
+        let point_symbol_id = point_symbol.unwrap();
+        let point_symbol_data = &analyzer.symbol_table.symbols()[point_symbol_id.get() as usize];
+        let point_type_id = point_symbol_data.type_id();
+        assert!(point_type_id.is_some(), "Point class should have type information");
+
+        // Verify the type is an Object with constructor
+        let point_type = type_interner.get(point_type_id.unwrap()).unwrap();
+        match point_type {
+            Type::Object(object_type) => {
+                assert_eq!(object_type.properties.len(), 1, "Should have 1 property (constructor)");
+                assert!(object_type.properties.contains_key("constructor"), "Should have 'constructor' property");
+            }
+            _ => panic!("Point type should be Object type"),
+        }
     }
 }
