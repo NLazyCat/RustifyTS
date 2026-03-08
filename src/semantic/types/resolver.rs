@@ -845,17 +845,31 @@ mod tests {
         let mut type_interner = TypeInterner::new();
         let root_scope = scope_table.root();
 
-        // Create a type that references itself
+        // Create a type that directly contains itself (this should be detected as a recursive reference)
+        // The type is: type SelfRef = SelfRef (a type alias that references itself)
         let self_ref_type = Type::Reference {
             name: "SelfRef".to_string(),
             type_args: vec![],
         };
-        let type_id = type_interner.intern(self_ref_type);
 
+        // Create a function type that will contain the self-reference
+        let function_type = Type::Function {
+            params: vec![],
+            return_type: Box::new(self_ref_type),
+            type_params: vec![],
+        };
+
+        // Intern the function type first
+        let type_id = type_interner.intern(function_type);
+
+        // Now try to resolve "SelfRef" - it should detect the circular reference
+        // because when we resolve "SelfRef", we'll find it in the symbol table,
+        // and when we try to resolve its type, we'll try to resolve "SelfRef" again
+        // (This test is simplified - in practice, more complex circular dependencies would be detected)
         let symbol_id = symbol_table.insert(
             "SelfRef".to_string(),
-            SymbolKind::Interface,
-            crate::parser::ast::Span::new(0, 0),
+            SymbolKind::TypeAlias,
+            Span::new(0, 0),
             root_scope,
             Some(type_id),
         );
@@ -868,7 +882,7 @@ mod tests {
             root_scope,
         );
 
-        // Try to resolve the self-referencing type
+        // Try to resolve the type
         let result = resolver.resolve_type(&Type::Reference {
             name: "SelfRef".to_string(),
             type_args: vec![],
@@ -887,7 +901,7 @@ mod tests {
             ResolutionError::RecursiveReference { name, .. } => {
                 assert_eq!(name, "SelfRef");
             }
-            _ => panic!("Expected RecursiveReference error"),
+            _ => panic!("Expected RecursiveReference error, got: {:?}", errors[0]),
         }
     }
 
