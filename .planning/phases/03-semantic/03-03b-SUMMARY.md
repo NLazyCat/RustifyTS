@@ -185,3 +185,17 @@ All analyzer tests pass (4/4):
 - Error reporting: PASS
 - Full pipeline: PASS
 - Type wiring: PASS
+
+## Self-Check: PASSED
+
+**Files Created:**
+- [x] `.planning/phases/03-semantic/03-03b-SUMMARY.md`
+
+**Commits Verified:**
+- [x] `220fa29` - feat(03-semantic-03b): implement main SemanticAnalyzer coordinator
+- [x] `d295e0a` - feat(03-semantic-03b): wire type information to symbol table
+- [x] `b86d568` - docs(03-semantic-03b): complete Main Analyzer & Integration plan
+
+**Tests Verified:**
+- [x] All 4 analyzer tests pass
+- [x] Code compiles without errors
