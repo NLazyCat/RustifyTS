@@ -132,7 +132,7 @@ impl Default for SymbolTable {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::semantic::scope::{Scope, ScopeKind, ScopeTable};
+    use crate::semantic::scope::{ScopeKind, ScopeTable};
     use crate::parser::ast::Span;
 
     fn test_span() -> Span {
