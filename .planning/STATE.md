@@ -120,7 +120,10 @@ The following gap closure plans have been created to address verification gaps:
   - Summary: 03-GAP-06-SUMMARY.md
   - Status: Complete
 - [ ] 03-GAP-07: Generic Type Variance Support (Wave 3)
-- [ ] 03-GAP-08: Type Resolution Error Collection (Wave 3)
+- [x] 03-GAP-08: Type Resolution Error Collection (Wave 3)
+  - Commit: c77b71e (implementation and tests)
+  - Summary: 03-GAP-08-SUMMARY.md
+  - Status: Complete
 
 ## Phase 04: Semantic Refactoring Core Layer
 
@@ -353,13 +356,13 @@ None
 
 None
 
-## Session: Phase 03-GAP-06 Execution Complete
+## Session: Phase 03-GAP-08 Execution Complete
 
 **Last session:** 2026-03-08
-**Stopped at:** Completed 03-GAP-06-PLAN.md (Class Type Information Extraction)
+**Stopped at:** Completed 03-GAP-08-PLAN.md (Type Resolution Error Collection)
 **Duration:** 25 min
-**Gap Plans Completed:** 6/8
+**Gap Plans Completed:** 7/8
 
 ## Last Commit
 
-**a92c829** - feat(03-GAP-06): implement class type information extraction
+**c77b71e** - feat(03-GAP-08): implement type resolution error collection
