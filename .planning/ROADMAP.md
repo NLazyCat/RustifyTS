@@ -71,23 +71,24 @@ pub struct AstNode {
 ---
 
 ### Phase 03: 语义分析层
-**状态:** 🟢 进行中 (1/5 waves 完成)
+**状态:** 🟢 进行中 (4/7 waves 完成)
 **目标:** 实现基础 IR 构建
 
 **Waves Progress:**
 - [x] Wave 0: Test Infrastructure (03-00)
-- [ ] Wave 1: Core Data Structures (03-01a, 03-02a)
-- [ ] Wave 1: Analysis Implementations (03-01b, 03-02b)
-- [ ] Wave 2: IR & CFG Construction (03-03a)
+- [x] Wave 1: Core Data Structures (03-01a)
+- [x] Wave 1: Core Data Structures (03-02a)
+- [x] Wave 2: IR & CFG Construction (03-03a) ✅ 刚完成
+- [ ] Wave 2: Analysis Implementations (03-02b)
 - [ ] Wave 3: Main Analyzer & Integration (03-03b)
 
 **Plans:** 7 plans
-- [x] 03-00-PLAN.md — Test infrastructure and skeleton files
-- [ ] 03-01a-PLAN.md — Scope and Symbol data structures
-- [ ] 03-01b-PLAN.md — Symbol Table and Scope Analyzer
-- [ ] 03-02a-PLAN.md — Type representation and interner
+- [x] 03-00-PLAN.md — Test infrastructure and skeleton files (8c7096b)
+- [x] 03-01a-PLAN.md — Scope and Symbol data structures (7820cc5)
+- [x] 03-01b-PLAN.md — Symbol Table and Scope Analyzer (e49917f)
+- [x] 03-02a-PLAN.md — Type representation and interner
 - [ ] 03-02b-PLAN.md — Type compatibility checking and resolution
-- [ ] 03-03a-PLAN.md — IR and CFG implementation
+- [x] 03-03a-PLAN.md — IR and CFG implementation (e825ced) ✅ 刚完成
 - [ ] 03-03b-PLAN.md — Main analyzer coordinator and integration
 
 **交付物:**

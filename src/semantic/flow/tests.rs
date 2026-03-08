@@ -198,7 +198,7 @@ fn test_cfg_builder_creation() {
         TypeId::new(0)
     );
 
-    let builder = CFGBuilder::new(&mut func);
+    let _builder = CFGBuilder::new(&mut func);
     // Builder is initialized with entry block as current
     assert_eq!(func.cfg.block_count(), 2); // Entry + Exit
 }

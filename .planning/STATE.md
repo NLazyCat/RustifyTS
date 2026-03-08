@@ -3,14 +3,14 @@
 ## Current Position
 
 **Phase:** 03-semantic
-**Plan:** 03-01b
+**Plan:** 03-03a
 **Status:** Complete
 
 ## Progress Bar
 
 ```
 [████████████████] 6/6 waves complete (100%) - Parser Phase
-[██████          ] 3/5 waves complete (60%) - Semantic Phase
+[████████        ] 4/5 waves complete (80%) - Semantic Phase
 ```
 
 ### Completed Waves
@@ -67,11 +67,17 @@
   - Summary: 03-02a-SUMMARY.md
   - Status: Complete
 
+- [x] Wave 2: IR & CFG Construction (03-03a)
+  - Files: src/semantic/ir/**/*, src/semantic/flow/**/*
+  - Commits: f5e07d5, 59cceec, db49447, e825ced
+  - Summary: 03-03a-SUMMARY.md
+  - Status: Complete
+
 ### Current Wave
 
-- [ ] Wave 1: Analysis Implementations
+- [ ] Wave 3: Main Analyzer & Integration (03-03b)
   - Status: Not Started
-  - Prerequisites: Wave 1 Core Data Structures complete
+  - Prerequisites: Wave 2 IR & CFG complete
 
 ### Remaining Waves
 
@@ -158,17 +164,44 @@ None
    - Constness will be tracked in symbol flags in future iterations
    - Aligns with existing SymbolKind enum variants
 
+### Wave 2: IR & CFG Construction (03-03a)
+
+1. **ValueId and BasicBlockId as newtypes**
+   - Type-safe identifiers prevent mixing IDs across different components
+   - Consistent with SymbolId and TypeId from earlier phases
+   - Copy trait for efficient storage and comparison
+
+2. **SSA-based IR with PHI nodes**
+   - Enables easier optimization and code generation
+   - PHI nodes handle variables defined in multiple paths
+   - Standard approach in modern compilers (LLVM-inspired)
+
+3. **Iterative dominator algorithm**
+   - Cooper-Harvey-Kennedy algorithm is simple and efficient
+   - Postorder traversal ensures convergence
+   - Enables SSA placement and optimizations
+
+4. **LoopContext stack for break/continue**
+   - Clean separation between different loop constructs
+   - Supports nested loops correctly
+   - Dead block creation for unreachable code after break/continue
+
+5. **Separate entry and exit blocks**
+   - Uniform CFG structure simplifies analysis
+   - Entry block is always BB0, exit block is BB1
+   - Makes function prologue/epilogue generation easier
+
 ## Issues
 
 None
 
-## Session: Wave 03-01b
+## Session: Wave 03-03a
 
 **Last session:** 2026-03-08
-**Stopped at:** Wave 1 complete, 03-01b-SUMMARY.md created
-**Duration:** 45 minutes
-**Commit:** e49917f
+**Stopped at:** Wave 2 complete, 03-03a-SUMMARY.md created
+**Duration:** 15 minutes
+**Commits:** 59cceec, db49447, e825ced
 
 ## Last Commit
 
-**e49917f** - feat(03-semantic-01b): implement ScopeAnalyzer visitor
+**e825ced** - fix(03-semantic-03a): resolve borrow checker error in type resolver

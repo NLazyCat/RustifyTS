@@ -47,7 +47,7 @@ unsafe impl Key for TypeId {
 ///
 /// These are the built-in primitive types that form the foundation of the
 /// TypeScript type system.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PrimitiveType {
     /// String type: `string`
     String,
@@ -67,6 +67,20 @@ pub enum PrimitiveType {
     Unknown,
     /// Any type: `any`
     Any,
+}
+
+impl PartialOrd for PrimitiveType {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PrimitiveType {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let a = *self as i32;
+        let b = *other as i32;
+        a.cmp(&b)
+    }
 }
 
 /// Object type: `{ prop: T; [key: K]: V }`
