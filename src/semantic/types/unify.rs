@@ -365,16 +365,357 @@ pub fn substitute_type_params(
 
 /// Unify two types, returning their most general common type.
 ///
+/// This function computes the least upper bound (LUB) of two types, which is the
+/// most specific type that both input types are subtypes of. This is essential for
+/// union type formation and type inference scenarios.
+///
 /// # Errors
 ///
 /// Returns an error if the types cannot be unified.
-pub fn unify(ty1: &Type, ty2: &Type, interner: &TypeInterner) -> UnificationResult<Type> {
-    todo!("Implement type unification");
+pub fn unify(ty1: &Type, ty2: &Type, interner: &mut TypeInterner) -> UnificationResult<Type> {
+    use PrimitiveType::*;
+
+    // Fast path: identical types unify to themselves
+    if ty1 == ty2 {
+        return Ok(ty1.clone());
+    }
+
+    match (ty1, ty2) {
+        // Task 1: Primitive type unification
+        // ===================================
+
+        // Any absorbs everything (LUB with any is any)
+        (Type::Primitive(Any), _) | (_, Type::Primitive(Any)) => {
+            Ok(Type::Primitive(Any))
+        }
+
+        // Unknown is compatible with everything (LUB is unknown)
+        (Type::Primitive(Unknown), _) | (_, Type::Primitive(Unknown)) => {
+            Ok(Type::Primitive(Unknown))
+        }
+
+        // Never is subtype of everything, so LUB is the other type
+        (Type::Primitive(Never), other) => Ok(other.clone()),
+        (other, Type::Primitive(Never)) => Ok(other.clone()),
+
+        // Identical primitives
+        (Type::Primitive(p1), Type::Primitive(p2)) if p1 == p2 => {
+            Ok(Type::Primitive(*p1))
+        }
+
+        // Different primitives are incompatible
+        (Type::Primitive(_), Type::Primitive(_)) => {
+            Err(UnificationError::IncompatibleTypes(format!("{:?}", ty1), format!("{:?}", ty2)))
+        }
+
+        // Task 2: Array and tuple unification
+        // ===================================
+
+        // Arrays: unify element types
+        (Type::Array(elem1), Type::Array(elem2)) => {
+            let unified_elem = unify(elem1, elem2, interner)?;
+            Ok(Type::Array(Box::new(unified_elem)))
+        }
+
+        // Tuples: length must match, unify each element
+        (Type::Tuple(elems1), Type::Tuple(elems2)) => {
+            if elems1.len() != elems2.len() {
+                return Err(UnificationError::IncompatibleTypes(
+                    format!("tuple of length {}", elems1.len()),
+                    format!("tuple of length {}", elems2.len()),
+                ));
+            }
+
+            let unified_elems: Result<Vec<_>, _> = elems1
+                .iter()
+                .zip(elems2.iter())
+                .map(|(e1, e2)| unify(e1, e2, interner))
+                .collect();
+
+            Ok(Type::Tuple(unified_elems?))
+        }
+
+        // Task 3: Object type unification
+        // =================================
+
+        // Objects: merge properties (intersection of types for overlapping properties)
+        (Type::Object(obj1), Type::Object(obj2)) => {
+            let mut unified_properties = FxHashMap::default();
+
+            // Add properties from obj1
+            for (name, prop_ty) in &obj1.properties {
+                unified_properties.insert(name.clone(), prop_ty.clone());
+            }
+
+            // Add/merge properties from obj2
+            for (name, prop_ty) in &obj2.properties {
+                if let Some(existing_ty) = unified_properties.get(name) {
+                    // Overlapping property: unify their types
+                    let unified_ty = unify(existing_ty, prop_ty, interner)?;
+                    unified_properties.insert(name.clone(), unified_ty);
+                } else {
+                    unified_properties.insert(name.clone(), prop_ty.clone());
+                }
+            }
+
+            // Handle index signatures
+            let unified_index_signature = match (&obj1.index_signature, &obj2.index_signature) {
+                (Some(sig1), Some(sig2)) => {
+                    // Both have index signatures - must unify
+                    Some(Box::new(unify(sig1, sig2, interner)?))
+                }
+                (Some(sig), None) | (None, Some(sig)) => {
+                    // One has index signature - use that
+                    Some(sig.clone())
+                }
+                (None, None) => None,
+            };
+
+            Ok(Type::Object(ObjectType {
+                properties: unified_properties,
+                index_signature: unified_index_signature,
+            }))
+        }
+
+        // Task 4: Function type unification
+        // ==================================
+
+        // Functions: contravariant parameters, covariant return type
+        (
+            Type::Function { params: params1, return_type: return1, type_params: type_params1 },
+            Type::Function { params: params2, return_type: return2, type_params: type_params2 }
+        ) => {
+            // Parameter count must match
+            if params1.len() != params2.len() {
+                return Err(UnificationError::IncompatibleTypes(
+                    format!("function with {} parameters", params1.len()),
+                    format!("function with {} parameters", params2.len()),
+                ));
+            }
+
+            // Unify parameters using contravariance (use is_subtype to check direction)
+            // For LUB, we need to find the common supertype of parameters
+            // This is tricky - for now we'll unify naively
+            let unified_params: Result<Vec<_>, _> = params1
+                .iter()
+                .zip(params2.iter())
+                .map(|(p1, p2)| unify(p1, p2, interner))
+                .collect();
+
+            // Unify return types using covariance
+            let unified_return = unify(return1, return2, interner)?;
+
+            // For type parameters, we use the first set (simplification)
+            // Full generic unification would require proper variance analysis
+            let unified_type_params = if !type_params1.is_empty() {
+                type_params1.clone()
+            } else if !type_params2.is_empty() {
+                type_params2.clone()
+            } else {
+                vec![]
+            };
+
+            Ok(Type::Function {
+                params: unified_params?,
+                return_type: Box::new(unified_return),
+                type_params: unified_type_params,
+            })
+        }
+
+        // Task 5: Union and intersection unification
+        // ==========================================
+
+        // Union vs Union: flatten and deduplicate
+        (Type::Union(types1), Type::Union(types2)) => {
+            let mut all_types: Vec<_> = types1.iter().chain(types2.iter()).cloned().collect();
+
+            // Try to unify all pairs to find the minimal set
+            let mut unified_types: Vec<Type> = Vec::new();
+
+            for ty in all_types {
+                let mut merged = false;
+                for existing in &mut unified_types {
+                    // Try to merge ty into existing
+                    if let Ok(merged_ty) = unify(existing, &ty, interner) {
+                        *existing = merged_ty;
+                        merged = true;
+                        break;
+                    }
+                }
+
+                if !merged {
+                    unified_types.push(ty);
+                }
+            }
+
+            // Sort for canonical representation
+            unified_types.sort_by(|a, b| {
+                let a_id = interner.intern(a.clone());
+                let b_id = interner.intern(b.clone());
+                a_id.cmp(&b_id)
+            });
+
+            // Remove duplicates
+            unified_types.dedup();
+
+            // Handle empty union (should be never)
+            if unified_types.is_empty() {
+                return Ok(Type::Primitive(Never));
+            }
+
+            // Handle single type (unwrap union)
+            if unified_types.len() == 1 {
+                return Ok(unified_types.into_iter().next().unwrap());
+            }
+
+            Ok(Type::Union(unified_types))
+        }
+
+        // Union vs non-union: add non-union to union
+        (Type::Union(types), other) | (other, Type::Union(types)) => {
+            let mut new_types = types.clone();
+            new_types.push(other.clone());
+
+            // Try to merge
+            let mut unified_types: Vec<Type> = Vec::new();
+
+            for ty in new_types {
+                let mut merged = false;
+                for existing in &mut unified_types {
+                    if let Ok(merged_ty) = unify(existing, &ty, interner) {
+                        *existing = merged_ty;
+                        merged = true;
+                        break;
+                    }
+                }
+
+                if !merged {
+                    unified_types.push(ty);
+                }
+            }
+
+            // Sort and dedup
+            unified_types.sort_by(|a, b| {
+                let a_id = interner.intern(a.clone());
+                let b_id = interner.intern(b.clone());
+                a_id.cmp(&b_id)
+            });
+            unified_types.dedup();
+
+            if unified_types.is_empty() {
+                return Ok(Type::Primitive(Never));
+            }
+
+            if unified_types.len() == 1 {
+                return Ok(unified_types.into_iter().next().unwrap());
+            }
+
+            Ok(Type::Union(unified_types))
+        }
+
+        // Intersection: compute GLB (intersection)
+        (Type::Intersection(types1), Type::Intersection(types2)) => {
+            let mut all_types: Vec<_> = types1.iter().chain(types2.iter()).cloned().collect();
+            Ok(Type::Intersection(all_types))
+        }
+
+        // Intersection vs non-intersection
+        (Type::Intersection(types), other) | (other, Type::Intersection(types)) => {
+            let mut new_types = types.clone();
+            new_types.push(other.clone());
+            Ok(Type::Intersection(new_types))
+        }
+
+        // Task 6: Generic type unification
+        // ================================
+
+        // Generics: try to unify if base types match
+        (Type::Generic { base: base1, args: args1 }, Type::Generic { base: base2, args: args2 }) => {
+            if base1 != base2 {
+                return Err(UnificationError::IncompatibleTypes(
+                    format!("generic type with base {:?}", base1),
+                    format!("generic type with base {:?}", base2),
+                ));
+            }
+
+            if args1.len() != args2.len() {
+                return Err(UnificationError::ArityMismatch {
+                    expected: args1.len(),
+                    actual: args2.len(),
+                });
+            }
+
+            // Unify type arguments
+            let unified_args: Result<Vec<_>, _> = args1
+                .iter()
+                .zip(args2.iter())
+                .map(|(a1, a2)| unify(a1, a2, interner))
+                .collect();
+
+            Ok(Type::Generic {
+                base: *base1,
+                args: unified_args?,
+            })
+        }
+
+        // Type parameters: unify to unknown (conservative)
+        (Type::TypeParameter(_), _) | (_, Type::TypeParameter(_)) => {
+            Ok(Type::Primitive(Unknown))
+        }
+
+        // References: unify names and type arguments
+        (Type::Reference { name: name1, type_args: args1 }, Type::Reference { name: name2, type_args: args2 }) => {
+            if name1 != name2 {
+                return Err(UnificationError::IncompatibleTypes(
+                    format!("type reference to {}", name1),
+                    format!("type reference to {}", name2),
+                ));
+            }
+
+            if args1.len() != args2.len() {
+                return Err(UnificationError::ArityMismatch {
+                    expected: args1.len(),
+                    actual: args2.len(),
+                });
+            }
+
+            let unified_args: Result<Vec<_>, _> = args1
+                .iter()
+                .zip(args2.iter())
+                .map(|(a1, a2)| unify(a1, a2, interner))
+                .collect();
+
+            Ok(Type::Reference {
+                name: name1.clone(),
+                type_args: unified_args?,
+            })
+        }
+
+        // Default: incompatible types
+        _ => {
+            Err(UnificationError::IncompatibleTypes(format!("{:?}", ty1), format!("{:?}", ty2)))
+        }
+    }
 }
 
 /// Check if a type is assignable to another type.
 ///
 /// Returns true if a value of type `from` can be assigned to a variable of type `to`.
+/// Assignability is more permissive than subtyping in some cases, particularly
+/// for type inference scenarios where bidirectional checking is used.
+///
+/// # Parameters
+///
+/// * `from` - The source type being assigned from
+/// * `to` - The target type being assigned to
+/// * `interner` - The type interner for looking up type information
 pub fn is_assignable(from: &Type, to: &Type, interner: &TypeInterner) -> bool {
-    todo!("Implement assignability check");
+    // Fast path: identical types are always assignable
+    if from == to {
+        return true;
+    }
+
+    // Use the existing is_subtype_internal function which handles all type combinations
+    // Assignability in TypeScript is based on subtyping relationships
+    is_subtype_internal(from, to, interner)
 }

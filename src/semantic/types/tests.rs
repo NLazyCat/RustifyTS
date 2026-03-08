@@ -44,29 +44,29 @@ mod unify {
         let any_id = interner.get_or_intern_primitive(PrimitiveType::Any);
 
         // Reflexivity
-        assert!(is_subtype(string_id, string_id, &interner));
-        assert!(is_subtype(number_id, number_id, &interner));
+        assert!(is_subtype(string_id, string_id, , &interner)mut interner));
+        assert!(is_subtype(number_id, number_id, , &interner)mut interner));
 
         // Never is subtype of everything
-        assert!(is_subtype(never_id, string_id, &interner));
-        assert!(is_subtype(never_id, number_id, &interner));
-        assert!(is_subtype(never_id, unknown_id, &interner));
+        assert!(is_subtype(never_id, string_id, , &interner)mut interner));
+        assert!(is_subtype(never_id, number_id, , &interner)mut interner));
+        assert!(is_subtype(never_id, unknown_id, , &interner)mut interner));
 
         // Everything is subtype of unknown
-        assert!(is_subtype(string_id, unknown_id, &interner));
-        assert!(is_subtype(number_id, unknown_id, &interner));
-        assert!(is_subtype(boolean_id, unknown_id, &interner));
+        assert!(is_subtype(string_id, unknown_id, , &interner)mut interner));
+        assert!(is_subtype(number_id, unknown_id, , &interner)mut interner));
+        assert!(is_subtype(boolean_id, unknown_id, , &interner)mut interner));
 
         // Any is compatible with everything
-        assert!(is_subtype(any_id, string_id, &interner));
-        assert!(is_subtype(string_id, any_id, &interner));
-        assert!(is_subtype(any_id, number_id, &interner));
-        assert!(is_subtype(number_id, any_id, &interner));
+        assert!(is_subtype(any_id, string_id, , &interner)mut interner));
+        assert!(is_subtype(string_id, any_id, , &interner)mut interner));
+        assert!(is_subtype(any_id, number_id, , &interner)mut interner));
+        assert!(is_subtype(number_id, any_id, , &interner)mut interner));
 
         // Incompatible primitives
-        assert!(!is_subtype(string_id, number_id, &interner));
-        assert!(!is_subtype(number_id, boolean_id, &interner));
-        assert!(!is_subtype(boolean_id, string_id, &interner));
+        assert!(!is_subtype(string_id, number_id, , &interner)mut interner));
+        assert!(!is_subtype(number_id, boolean_id, , &interner)mut interner));
+        assert!(!is_subtype(boolean_id, string_id, , &interner)mut interner));
     }
 
     #[test]
@@ -81,22 +81,22 @@ mod unify {
         let string_or_number_id = interner.get_or_intern_union(vec![string_id, number_id]);
 
         // string <: string | number
-        assert!(is_subtype(string_id, string_or_number_id, &interner));
+        assert!(is_subtype(string_id, string_or_number_id, , &interner)mut interner));
         // number <: string | number
-        assert!(is_subtype(number_id, string_or_number_id, &interner));
+        assert!(is_subtype(number_id, string_or_number_id, , &interner)mut interner));
         // boolean <: string | number? No
-        assert!(!is_subtype(boolean_id, string_or_number_id, &interner));
+        assert!(!is_subtype(boolean_id, string_or_number_id, , &interner)mut interner));
 
         // string | number <: string? No
-        assert!(!is_subtype(string_or_number_id, string_id, &interner));
+        assert!(!is_subtype(string_or_number_id, string_id, , &interner)mut interner));
 
         // Union of string | number | boolean
         let string_number_bool_id = interner.get_or_intern_union(vec![string_id, number_id, boolean_id]);
 
         // string | number <: string | number | boolean
-        assert!(is_subtype(string_or_number_id, string_number_bool_id, &interner));
+        assert!(is_subtype(string_or_number_id, string_number_bool_id, , &interner)mut interner));
         // string | number | boolean <: string | number? No
-        assert!(!is_subtype(string_number_bool_id, string_or_number_id, &interner));
+        assert!(!is_subtype(string_number_bool_id, string_or_number_id, , &interner)mut interner));
     }
 
     #[test]
@@ -129,12 +129,12 @@ mod unify {
         let intersection_id = interner.intern(Type::Intersection(vec![obj1, obj2]));
 
         // Intersection is subtype of each component
-        assert!(is_subtype(intersection_id, obj1_id, &interner));
-        assert!(is_subtype(intersection_id, obj2_id, &interner));
+        assert!(is_subtype(intersection_id, obj1_id, , &interner)mut interner));
+        assert!(is_subtype(intersection_id, obj2_id, , &interner)mut interner));
 
         // Components are not subtypes of intersection
-        assert!(!is_subtype(obj1_id, intersection_id, &interner));
-        assert!(!is_subtype(obj2_id, intersection_id, &interner));
+        assert!(!is_subtype(obj1_id, intersection_id, , &interner)mut interner));
+        assert!(!is_subtype(obj2_id, intersection_id, , &interner)mut interner));
     }
 
     #[test]
@@ -150,11 +150,11 @@ mod unify {
         let unknown_array_id = interner.get_or_intern_array(unknown_id);
 
         // Covariance: string[] <: unknown[]
-        assert!(is_subtype(string_array_id, unknown_array_id, &interner));
+        assert!(is_subtype(string_array_id, unknown_array_id, , &interner)mut interner));
         // number[] <: unknown[]
-        assert!(is_subtype(number_array_id, unknown_array_id, &interner));
+        assert!(is_subtype(number_array_id, unknown_array_id, , &interner)mut interner));
         // string[] <: number[]? No
-        assert!(!is_subtype(string_array_id, number_array_id, &interner));
+        assert!(!is_subtype(string_array_id, number_array_id, , &interner)mut interner));
     }
 
     #[test]
@@ -186,12 +186,12 @@ mod unify {
         ]));
 
         // [string, number] <: [unknown, unknown]
-        assert!(is_subtype(tuple1_id, tuple2_id, &interner));
+        assert!(is_subtype(tuple1_id, tuple2_id, , &interner)mut interner));
         // [unknown, unknown] <: [string, number]? No
-        assert!(!is_subtype(tuple2_id, tuple1_id, &interner));
+        assert!(!is_subtype(tuple2_id, tuple1_id, , &interner)mut interner));
         // Different lengths are incompatible
-        assert!(!is_subtype(tuple1_id, tuple3_id, &interner));
-        assert!(!is_subtype(tuple3_id, tuple1_id, &interner));
+        assert!(!is_subtype(tuple1_id, tuple3_id, , &interner)mut interner));
+        assert!(!is_subtype(tuple3_id, tuple1_id, , &interner)mut interner));
     }
 
     #[test]
@@ -253,13 +253,13 @@ mod unify {
         let obj5_id = interner.intern(obj5);
 
         // Extra properties allowed: obj2 <: obj1
-        assert!(is_subtype(obj2_id, obj1_id, &interner));
+        assert!(is_subtype(obj2_id, obj1_id, , &interner)mut interner));
         // Missing property: obj1 <: obj2? No
-        assert!(!is_subtype(obj1_id, obj2_id, &interner));
+        assert!(!is_subtype(obj1_id, obj2_id, , &interner)mut interner));
         // Wrong property type: obj3 <: obj1? No
-        assert!(!is_subtype(obj3_id, obj1_id, &interner));
+        assert!(!is_subtype(obj3_id, obj1_id, , &interner)mut interner));
         // Object with matching properties conforms to index signature
-        assert!(is_subtype(obj5_id, obj4_id, &interner));
+        assert!(is_subtype(obj5_id, obj4_id, , &interner)mut interner));
     }
 
     #[test]
@@ -296,14 +296,14 @@ mod unify {
         let func3_id = interner.intern(func3);
 
         // Parameter contravariance: (unknown) => R <: (string) => R
-        assert!(is_subtype(func2_id, func1_id, &interner));
+        assert!(is_subtype(func2_id, func1_id, , &interner)mut interner));
         // (string) => R <: (unknown) => R? No
-        assert!(!is_subtype(func1_id, func2_id, &interner));
+        assert!(!is_subtype(func1_id, func2_id, , &interner)mut interner));
 
         // Return type covariance: () => string <: () => unknown
-        assert!(is_subtype(func1_id, func3_id, &interner));
+        assert!(is_subtype(func1_id, func3_id, , &interner)mut interner));
         // () => unknown <: () => string? No
-        assert!(!is_subtype(func3_id, func1_id, &interner));
+        assert!(!is_subtype(func3_id, func1_id, , &interner)mut interner));
     }
 
     #[test]
@@ -377,6 +377,291 @@ mod unify {
         };
         let expected_func_id = interner.intern(expected_func);
         assert_eq!(substituted_func, expected_func_id);
+    }
+
+    #[test]
+    fn test_primitive_assignability() {
+        let mut interner = TypeInterner::new();
+
+        let string_id = interner.get_or_intern_primitive(PrimitiveType::String);
+        let number_id = interner.get_or_intern_primitive(PrimitiveType::Number);
+        let boolean_id = interner.get_or_intern_primitive(PrimitiveType::Boolean);
+        let never_id = interner.get_or_intern_primitive(PrimitiveType::Never);
+        let unknown_id = interner.get_or_intern_primitive(PrimitiveType::Unknown);
+        let any_id = interner.get_or_intern_primitive(PrimitiveType::Any);
+
+        // Identical types are assignable
+        assert!(is_assignable(&Type::Primitive(PrimitiveType::String), &Type::Primitive(PrimitiveType::String), &mut interner));
+        assert!(is_assignable(&Type::Primitive(PrimitiveType::Number), &Type::Primitive(PrimitiveType::Number), &mut interner));
+
+        // Never can be assigned to any type
+        assert!(is_assignable(&Type::Primitive(PrimitiveType::Never), &Type::Primitive(PrimitiveType::String), &mut interner));
+        assert!(is_assignable(&Type::Primitive(PrimitiveType::Never), &Type::Primitive(PrimitiveType::Number), &mut interner));
+        assert!(is_assignable(&Type::Primitive(PrimitiveType::Never), &Type::Primitive(PrimitiveType::Unknown), &mut interner));
+
+        // Any can be assigned to any type and from any type
+        assert!(is_assignable(&Type::Primitive(PrimitiveType::Any), &Type::Primitive(PrimitiveType::String), &mut interner));
+        assert!(is_assignable(&Type::Primitive(PrimitiveType::String), &Type::Primitive(PrimitiveType::Any), &mut interner));
+        assert!(is_assignable(&Type::Primitive(PrimitiveType::Any), &Type::Primitive(PrimitiveType::Number), , &interner)mut interner));
+        assert!(is_assignable(&Type::Primitive(PrimitiveType::Number), &Type::Primitive(PrimitiveType::Any), , &interner)mut interner));
+
+        // Unknown can be assigned from any type
+        assert!(is_assignable(&Type::Primitive(PrimitiveType::String), &Type::Primitive(PrimitiveType::Unknown), , &interner)mut interner));
+        assert!(is_assignable(&Type::Primitive(PrimitiveType::Number), &Type::Primitive(PrimitiveType::Unknown), , &interner)mut interner));
+        assert!(is_assignable(&Type::Primitive(PrimitiveType::Boolean), &Type::Primitive(PrimitiveType::Unknown), , &interner)mut interner));
+
+        // Incompatible primitives are not assignable
+        assert!(!is_assignable(&Type::Primitive(PrimitiveType::String), &Type::Primitive(PrimitiveType::Number), , &interner)mut interner));
+        assert!(!is_assignable(&Type::Primitive(PrimitiveType::Number), &Type::Primitive(PrimitiveType::Boolean), , &interner)mut interner));
+        assert!(!is_assignable(&Type::Primitive(PrimitiveType::Boolean), &Type::Primitive(PrimitiveType::String), , &interner)mut interner));
+    }
+
+    #[test]
+    fn test_array_assignability() {
+        let mut interner = TypeInterner::new();
+
+        let string_id = interner.get_or_intern_primitive(PrimitiveType::String);
+        let number_id = interner.get_or_intern_primitive(PrimitiveType::Number);
+        let unknown_id = interner.get_or_intern_primitive(PrimitiveType::Unknown);
+
+        let string_array = Type::Array(Box::new(Type::Primitive(PrimitiveType::String)));
+        let number_array = Type::Array(Box::new(Type::Primitive(PrimitiveType::Number)));
+        let unknown_array = Type::Array(Box::new(Type::Primitive(PrimitiveType::Unknown)));
+
+        // Covariant element types
+        assert!(is_assignable(&string_array, &unknown_array, , &interner)mut interner));
+        assert!(is_assignable(&number_array, &unknown_array, , &interner)mut interner));
+
+        // Different element types are not assignable
+        assert!(!is_assignable(&string_array, &number_array, , &interner)mut interner));
+        assert!(!is_assignable(&number_array, &string_array, , &interner)mut interner));
+    }
+
+    #[test]
+    fn test_tuple_assignability() {
+        let mut interner = TypeInterner::new();
+
+        let tuple1 = Type::Tuple(vec![
+            Type::Primitive(PrimitiveType::String),
+            Type::Primitive(PrimitiveType::Number),
+        ]);
+
+        let tuple2 = Type::Tuple(vec![
+            Type::Primitive(PrimitiveType::Unknown),
+            Type::Primitive(PrimitiveType::Unknown),
+        ]);
+
+        let tuple3 = Type::Tuple(vec![
+            Type::Primitive(PrimitiveType::String),
+            Type::Primitive(PrimitiveType::Number),
+            Type::Primitive(PrimitiveType::Boolean),
+        ]);
+
+        // Same length, compatible element types
+        assert!(is_assignable(&tuple1, &tuple2, , &interner)mut interner));
+
+        // Different lengths are not assignable
+        assert!(!is_assignable(&tuple1, &tuple3, , &interner)mut interner));
+        assert!(!is_assignable(&tuple3, &tuple1, , &interner)mut interner));
+
+        // Same length, incompatible element types
+        let tuple4 = Type::Tuple(vec![
+            Type::Primitive(PrimitiveType::Number),
+            Type::Primitive(PrimitiveType::String),
+        ]);
+        assert!(!is_assignable(&tuple1, &tuple4, , &interner)mut interner));
+    }
+
+    #[test]
+    fn test_object_assignability() {
+        let mut interner = TypeInterner::new();
+
+        // Object with name: string
+        let obj1 = Type::Object(ObjectType {
+            properties: {
+                let mut props = FxHashMap::default();
+                props.insert("name".to_string(), Type::Primitive(PrimitiveType::String));
+                props
+            },
+            index_signature: None,
+        });
+
+        // Object with name: string, age: number (extra property)
+        let obj2 = Type::Object(ObjectType {
+            properties: {
+                let mut props = FxHashMap::default();
+                props.insert("name".to_string(), Type::Primitive(PrimitiveType::String));
+                props.insert("age".to_string(), Type::Primitive(PrimitiveType::Number));
+                props
+            },
+            index_signature: None,
+        });
+
+        // Object with name: number (wrong type)
+        let obj3 = Type::Object(ObjectType {
+            properties: {
+                let mut props = FxHashMap::default();
+                props.insert("name".to_string(), Type::Primitive(PrimitiveType::Number));
+                props
+            },
+            index_signature: None,
+        });
+
+        // Extra properties allowed in structural typing
+        assert!(is_assignable(&obj2, &obj1, , &interner)mut interner));
+
+        // Missing property not allowed
+        assert!(!is_assignable(&obj1, &obj2, , &interner)mut interner));
+
+        // Wrong property type not allowed
+        assert!(!is_assignable(&obj3, &obj1, , &interner)mut interner));
+    }
+
+    #[test]
+    fn test_function_assignability() {
+        let mut interner = TypeInterner::new();
+
+        // (string) => number
+        let func1 = Type::Function {
+            params: vec![Type::Primitive(PrimitiveType::String)],
+            return_type: Box::new(Type::Primitive(PrimitiveType::Number)),
+            type_params: vec![],
+        };
+
+        // (unknown) => number
+        let func2 = Type::Function {
+            params: vec![Type::Primitive(PrimitiveType::Unknown)],
+            return_type: Box::new(Type::Primitive(PrimitiveType::Number)),
+            type_params: vec![],
+        };
+
+        // (string) => unknown
+        let func3 = Type::Function {
+            params: vec![Type::Primitive(PrimitiveType::String)],
+            return_type: Box::new(Type::Primitive(PrimitiveType::Unknown)),
+            type_params: vec![],
+        };
+
+        // Parameter contravariance: (unknown) => R assignable to (string) => R
+        assert!(is_assignable(&func2, &func1, , &interner)mut interner));
+        assert!(!is_assignable(&func1, &func2, , &interner)mut interner));
+
+        // Return type covariance: () => string assignable to () => unknown
+        assert!(is_assignable(&func1, &func3, , &interner)mut interner));
+        assert!(!is_assignable(&func3, &func1, , &interner)mut interner));
+    }
+
+    #[test]
+    fn test_union_assignability() {
+        let mut interner = TypeInterner::new();
+
+        let string_id = interner.get_or_intern_primitive(PrimitiveType::String);
+        let number_id = interner.get_or_intern_primitive(PrimitiveType::Number);
+        let boolean_id = interner.get_or_intern_primitive(PrimitiveType::Boolean);
+        let unknown_id = interner.get_or_intern_primitive(PrimitiveType::Unknown);
+
+        // string | number
+        let union1 = Type::Union(vec![
+            Type::Primitive(PrimitiveType::String),
+            Type::Primitive(PrimitiveType::Number),
+        ]);
+
+        // string | number | boolean
+        let union2 = Type::Union(vec![
+            Type::Primitive(PrimitiveType::String),
+            Type::Primitive(PrimitiveType::Number),
+            Type::Primitive(PrimitiveType::Boolean),
+        ]);
+
+        // Union to type: assignable if all members are assignable
+        assert!(is_assignable(&union1, &Type::Primitive(PrimitiveType::Unknown), , &interner)mut interner));
+        assert!(!is_assignable(&union1, &Type::Primitive(PrimitiveType::String), , &interner)mut interner));
+
+        // Type to union: assignable if assignable to at least one member
+        assert!(is_assignable(&Type::Primitive(PrimitiveType::String), &union1, , &interner)mut interner));
+        assert!(!is_assignable(&Type::Primitive(PrimitiveType::Boolean), &union1, , &interner)mut interner));
+
+        // Union to union
+        assert!(is_assignable(&union1, &union2, , &interner)mut interner));
+        assert!(!is_assignable(&union2, &union1, , &interner)mut interner));
+    }
+
+    #[test]
+    fn test_intersection_assignability() {
+        let mut interner = TypeInterner::new();
+
+        // {name: string}
+        let obj1 = Type::Object(ObjectType {
+            properties: {
+                let mut props = FxHashMap::default();
+                props.insert("name".to_string(), Type::Primitive(PrimitiveType::String));
+                props
+            },
+            index_signature: None,
+        });
+
+        // {age: number}
+        let obj2 = Type::Object(ObjectType {
+            properties: {
+                let mut props = FxHashMap::default();
+                props.insert("age".to_string(), Type::Primitive(PrimitiveType::Number));
+                props
+            },
+            index_signature: None,
+        });
+
+        // {name: string} & {age: number}
+        let intersection = Type::Intersection(vec![obj1.clone(), obj2.clone()]);
+
+        // Intersection assignable to type if at least one member is assignable
+        assert!(is_assignable(&intersection, &obj1, , &interner)mut interner));
+        assert!(is_assignable(&intersection, &obj2, , &interner)mut interner));
+
+        // Type assignable to intersection if assignable to all members
+        let obj3 = Type::Object(ObjectType {
+            properties: {
+                let mut props = FxHashMap::default();
+                props.insert("name".to_string(), Type::Primitive(PrimitiveType::String));
+                props.insert("age".to_string(), Type::Primitive(PrimitiveType::Number));
+                props
+            },
+            index_signature: None,
+        });
+        assert!(is_assignable(&obj3, &intersection, , &interner)mut interner));
+        assert!(!is_assignable(&obj1, &intersection, , &interner)mut interner));
+    }
+
+    #[test]
+    fn test_generic_assignability() {
+        let mut interner = TypeInterner::new();
+
+        // Simple case: identical generics are assignable
+        let base_id = interner.intern(Type::Primitive(PrimitiveType::Any));
+        let generic1 = Type::Generic {
+            base: base_id,
+            args: vec![
+                Type::Primitive(PrimitiveType::String),
+            ],
+        };
+
+        let generic2 = Type::Generic {
+            base: base_id,
+            args: vec![
+                Type::Primitive(PrimitiveType::String),
+            ],
+        };
+
+        assert!(is_assignable(&generic1, &generic2, , &interner)mut interner));
+
+        // Different type arguments are not assignable (basic implementation)
+        let generic3 = Type::Generic {
+            base: base_id,
+            args: vec![
+                Type::Primitive(PrimitiveType::Number),
+            ],
+        };
+
+        assert!(!is_assignable(&generic1, &generic3, , &interner)mut interner));
     }
 }
 
