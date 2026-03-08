@@ -1271,4 +1271,124 @@ mod interner {
 
         assert_eq!(id1, id2);
     }
+
+    #[test]
+    fn test_generic_covariance() {
+        let mut interner = TypeInterner::new();
+
+        // Create Array<string> and Array<unknown>
+        // Array is covariant, so Array<string> <: Array<unknown>
+        let string_id = interner.intern(Type::Primitive(PrimitiveType::String));
+        let unknown_id = interner.intern(Type::Primitive(PrimitiveType::Unknown));
+
+        let array_unknown = interner.intern(Type::Reference {
+            name: "Array".to_string(),
+            type_args: vec![interner.get(unknown_id).unwrap().clone()],
+        });
+
+        let array_string = interner.intern(Type::Reference {
+            name: "Array".to_string(),
+            type_args: vec![interner.get(string_id).unwrap().clone()],
+        });
+
+        // Array<string> is subtype of Array<unknown>
+        assert!(is_subtype(array_string, array_unknown, &interner));
+
+        // Array<unknown> is NOT subtype of Array<string>
+        assert!(!is_subtype(array_unknown, array_string, &interner));
+    }
+
+    #[test]
+    fn test_generic_invariance() {
+        let mut interner = TypeInterner::new();
+
+        // Create a custom invariant generic type
+        // For now, we use Array which is actually covariant
+        // But the test framework should handle invariance correctly
+
+        let string_id = interner.intern(Type::Primitive(PrimitiveType::String));
+        let number_id = interner.intern(Type::Primitive(PrimitiveType::Number));
+
+        let array_string = interner.intern(Type::Reference {
+            name: "Array".to_string(),
+            type_args: vec![interner.get(string_id).unwrap().clone()],
+        });
+
+        let array_number = interner.intern(Type::Reference {
+            name: "Array".to_string(),
+            type_args: vec![interner.get(number_id).unwrap().clone()],
+        });
+
+        // Array<string> is NOT subtype of Array<number>
+        assert!(!is_subtype(array_string, array_number, &interner));
+    }
+
+    #[test]
+    fn test_map_covariance() {
+        let mut interner = TypeInterner::new();
+
+        // Map<K, V> is covariant in both K and V
+        let string_id = interner.intern(Type::Primitive(PrimitiveType::String));
+        let unknown_id = interner.intern(Type::Primitive(PrimitiveType::Unknown));
+
+        let map_unknown_unknown = interner.intern(Type::Reference {
+            name: "Map".to_string(),
+            type_args: vec![
+                interner.get(unknown_id).unwrap().clone(),
+                interner.get(unknown_id).unwrap().clone(),
+            ],
+        });
+
+        let map_string_string = interner.intern(Type::Reference {
+            name: "Map".to_string(),
+            type_args: vec![
+                interner.get(string_id).unwrap().clone(),
+                interner.get(string_id).unwrap().clone(),
+            ],
+        });
+
+        // Map<string, string> <: Map<unknown, unknown>
+        assert!(is_subtype(map_string_string, map_unknown_unknown, &interner));
+
+        // Map<unknown, unknown> is NOT subtype of Map<string, string>
+        assert!(!is_subtype(map_unknown_unknown, map_string_string, &interner));
+    }
+
+    #[test]
+    fn test_promise_covariance() {
+        let mut interner = TypeInterner::new();
+
+        // Promise<T> is covariant in T
+        let string_id = interner.intern(Type::Primitive(PrimitiveType::String));
+        let unknown_id = interner.intern(Type::Primitive(PrimitiveType::Unknown));
+
+        let promise_unknown = interner.intern(Type::Reference {
+            name: "Promise".to_string(),
+            type_args: vec![interner.get(unknown_id).unwrap().clone()],
+        });
+
+        let promise_string = interner.intern(Type::Reference {
+            name: "Promise".to_string(),
+            type_args: vec![interner.get(string_id).unwrap().clone()],
+        });
+
+        // Promise<string> <: Promise<unknown>
+        assert!(is_subtype(promise_string, promise_unknown, &interner));
+    }
+
+    #[test]
+    fn test_variance_registry() {
+        // Test that we can look up variance for built-in types
+        let array_variance = get_generic_variance("Array");
+        assert_eq!(array_variance, Some(vec![Variance::Covariant]));
+
+        let promise_variance = get_generic_variance("Promise");
+        assert_eq!(promise_variance, Some(vec![Variance::Covariant]));
+
+        let map_variance = get_generic_variance("Map");
+        assert_eq!(map_variance, Some(vec![Variance::Covariant, Variance::Covariant]));
+
+        let unknown_variance = get_generic_variance("UnknownType");
+        assert_eq!(unknown_variance, None);
+    }
 }

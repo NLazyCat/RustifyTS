@@ -82,7 +82,7 @@ pub struct AstNode {
 - [x] Wave 2: Analysis Implementations (03-02b)
 - [x] Wave 3: Main Analyzer & Integration (03-03b)
 
-**Plans:** 13/15 plans executed
+**Plans:** 14/15 plans executed
 - [x] 03-00-PLAN.md — Test infrastructure and skeleton files (8c7096b)
 - [x] 03-01a-PLAN.md — Scope and Symbol data structures (7820cc5)
 - [x] 03-01b-PLAN.md — Symbol Table and Scope Analyzer (e49917f)
@@ -95,9 +95,9 @@ pub struct AstNode {
 - [x] 03-GAP-01-PLAN.md — Type Unification Implementation (Complete - 31bf788)
 - [x] 03-GAP-02-PLAN.md — Type Assignability Check Implementation (Complete - b2c901e)
 - [x] 03-GAP-03-PLAN.md — CFG Integration into Main Analyzer (Complete - eb3c7a1)
-- [ ] 03-GAP-04-PLAN.md — Function Parameter Handling
-- [ ] 03-GAP-05-PLAN.md — Exception Parameter Handling
-- [ ] 03-GAP-06-PLAN.md — Class Type Information Extraction
+- [x] 03-GAP-04-PLAN.md — Function Parameter Handling (Complete - 6ddde24)
+- [x] 03-GAP-05-PLAN.md — Exception Parameter Handling (Complete - 29250d0)
+- [x] 03-GAP-06-PLAN.md — Class Type Information Extraction (Complete - a92c829)
 - [ ] 03-GAP-07-PLAN.md — Generic Type Variance Support
 - [ ] 03-GAP-08-PLAN.md — Type Resolution Error Collection
 

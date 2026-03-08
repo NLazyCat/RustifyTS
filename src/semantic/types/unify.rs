@@ -5,7 +5,13 @@
 //! unified to.
 
 use super::*;
+use super::variance::{Variance, VarianceRegistry};
 use fxhash::FxHashMap;
+
+// Global variance registry with built-in types
+thread_local! {
+    static VARIANCE_REGISTRY: VarianceRegistry = VarianceRegistry::new();
+}
 
 /// Result of a type unification attempt.
 pub type UnificationResult<T = ()> = Result<T, UnificationError>;
@@ -50,6 +56,16 @@ pub fn is_subtype(a: TypeId, b: TypeId, interner: &TypeInterner) -> bool {
     };
 
     is_subtype_internal(a_ty, b_ty, interner)
+}
+
+/// Get variance information for a generic type reference.
+///
+/// Returns the variance profile for a named generic type, or None if
+/// the type is not a known generic or has no variance information.
+pub fn get_generic_variance(type_name: &str) -> Option<Vec<Variance>> {
+    VARIANCE_REGISTRY.with(|registry| {
+        registry.get(type_name).map(|v| v.to_vec())
+    })
 }
 
 /// Internal subtype check implementation that works with Type references.
@@ -171,11 +187,111 @@ fn is_subtype_internal(a: &Type, b: &Type, interner: &TypeInterner) -> bool {
             is_subtype_internal(a_return, b_return, interner)
         }
 
-        // TODO: Generic type handling
-        (Type::Generic { .. }, Type::Generic { .. }) => {
-            // For now, only identical generics are compatible
-            // Full variance handling will be implemented later
-            a == b
+        // Generic type subtyping with variance support
+        (Type::Generic { base: base1, args: args1 }, Type::Generic { base: base2, args: args2 }) => {
+            // Check if base types are the same
+            if base1 != base2 {
+                return false;
+            }
+
+            // Check if the base type is a reference to determine variance
+            let base_ty = match interner.get(*base1) {
+                Some(ty) => ty,
+                None => return false,
+            };
+
+            // Get variance for this generic type
+            let variances: Option<Vec<Variance>> = match base_ty {
+                Type::Reference { name, .. } => {
+                    VARIANCE_REGISTRY.with(|registry| {
+                        registry.get(name).map(|v| v.to_vec())
+                    })
+                }
+                _ => None,
+            };
+
+            // If we have variance information, use it for checking
+            if let Some(variances) = variances {
+                let variances_len = variances.len();
+                if args1.len() != args2.len() || args1.len() != variances_len {
+                    return false;
+                }
+
+                // Check each type argument according to its variance
+                for ((arg1, arg2), &variance) in args1.iter().zip(args2.iter()).zip(variances.iter()) {
+                    let is_subtype = match variance {
+                        // Covariant: arg1 must be subtype of arg2
+                        Variance::Covariant => is_subtype_internal(arg1, arg2, interner),
+
+                        // Contravariant: arg2 must be subtype of arg1 (reversed)
+                        Variance::Contravariant => is_subtype_internal(arg2, arg1, interner),
+
+                        // Invariant: must be equal
+                        Variance::Invariant => arg1 == arg2,
+
+                        // Bivariant: always true
+                        Variance::Bivariant => true,
+                    };
+
+                    if !is_subtype {
+                        return false;
+                    }
+                }
+
+                true
+            } else {
+                // If no variance information, treat as invariant (require equality)
+                // This is conservative but safe
+                a == b
+            }
+        }
+
+        // Type references with variance support
+        (Type::Reference { name: name1, type_args: args1 }, Type::Reference { name: name2, type_args: args2 }) => {
+            // Check if the type names match
+            if name1 != name2 {
+                return false;
+            }
+
+            // Get variance for this generic type
+            let variances: Option<Vec<Variance>> = VARIANCE_REGISTRY.with(|registry| {
+                registry.get(name1).map(|v| v.to_vec())
+            });
+
+            // If we have variance information, use it for checking
+            if let Some(variances) = variances {
+                let variances_len = variances.len();
+                if args1.len() != args2.len() || args1.len() != variances_len {
+                    return false;
+                }
+
+                // Check each type argument according to its variance
+                for ((arg1, arg2), &variance) in args1.iter().zip(args2.iter()).zip(variances.iter()) {
+                    let is_subtype = match variance {
+                        // Covariant: arg1 must be subtype of arg2
+                        Variance::Covariant => is_subtype_internal(arg1, arg2, interner),
+
+                        // Contravariant: arg2 must be subtype of arg1 (reversed)
+                        Variance::Contravariant => is_subtype_internal(arg2, arg1, interner),
+
+                        // Invariant: must be equal
+                        Variance::Invariant => arg1 == arg2,
+
+                        // Bivariant: always true
+                        Variance::Bivariant => true,
+                    };
+
+                    if !is_subtype {
+                        return false;
+                    }
+                }
+
+                true
+            } else {
+                // If no variance information, treat as invariant (require equality)
+                // This is conservative but safe
+                a == b
+            }
         }
 
         // Default: types are not compatible

@@ -4,12 +4,12 @@
 //! to their actual type definitions in the current scope.
 
 use super::*;
-use crate::parser::ast::types::{Parameter, TypeAnnotation};
+use crate::parser::ast::types::TypeAnnotation;
 use crate::parser::ast::visitor::Visitor;
 use crate::parser::ast::{AstNode, NodeKind};
-use crate::parser::ast::types::VariableDeclaration;
 use crate::semantic::scope::{ScopeId, ScopeTable};
 use crate::semantic::symbol::{SymbolKind, SymbolTable};
+use crate::parser::ast::Span;
 use fxhash::FxHashMap;
 use std::cell::RefCell;
 
@@ -30,6 +30,8 @@ pub struct TypeResolver<'a> {
     resolution_cache: FxHashMap<(String, ScopeId), TypeId>,
     /// Set of currently resolving types to detect cycles
     resolving: RefCell<FxHashMap<String, ScopeId>>,
+    /// Collected resolution errors
+    errors: Vec<ResolutionError>,
 }
 
 impl<'a> TypeResolver<'a> {
@@ -47,6 +49,7 @@ impl<'a> TypeResolver<'a> {
             current_scope: root_scope,
             resolution_cache: FxHashMap::default(),
             resolving: RefCell::new(FxHashMap::default()),
+            errors: Vec::new(),
         }
     }
 
@@ -57,7 +60,14 @@ impl<'a> TypeResolver<'a> {
     pub fn resolve_type_reference(&mut self, reference: &Type) -> ResolutionResult<TypeId> {
         let (name, type_args) = match reference {
             Type::Reference { name, type_args } => (name, type_args),
-            _ => return Err(ResolutionError::NotAType("Not a type reference".to_string())),
+            _ => {
+                let error = ResolutionError::InvalidAnnotation {
+                    message: "Not a type reference".to_string(),
+                    span: Span::new(0, 0),
+                };
+                self.add_error(error.clone());
+                return Err(error);
+            }
         };
 
         // Check cache first
@@ -67,29 +77,68 @@ impl<'a> TypeResolver<'a> {
         }
 
         // Check for cycles
-        let mut resolving = self.resolving.borrow_mut();
-        if resolving.contains_key(name) && resolving[name] == self.current_scope {
-            return Err(ResolutionError::RecursiveReference(name.clone()));
+        {
+            let mut resolving = self.resolving.borrow_mut();
+            if resolving.contains_key(name) && resolving[name] == self.current_scope {
+                let error = ResolutionError::RecursiveReference {
+                    name: name.clone(),
+                    span: Span::new(0, 0),
+                    scope_id: self.current_scope,
+                };
+                drop(resolving); // Drop before adding error
+                self.add_error(error.clone());
+                return Err(error);
+            }
+            resolving.insert(name.clone(), self.current_scope);
         }
-        resolving.insert(name.clone(), self.current_scope);
-        drop(resolving);
 
         // Look up the type in the symbol table
-        let symbol_id = self.symbol_table.lookup_lexical(
+        let symbol_id = match self.symbol_table.lookup_lexical(
             name,
             self.current_scope,
             self.scope_table,
-        ).ok_or_else(|| ResolutionError::TypeNotFound(name.clone()))?;
+        ) {
+            Some(id) => id,
+            None => {
+                let error = ResolutionError::TypeNotFound {
+                    name: name.clone(),
+                    span: Span::new(0, 0),
+                    scope_id: self.current_scope,
+                };
+                self.add_error(error.clone());
+                return Err(error);
+            }
+        };
 
-        let symbol = self.symbol_table.lookup(symbol_id)
-            .ok_or_else(|| ResolutionError::TypeNotFound(name.clone()))?;
+        let symbol = match self.symbol_table.lookup(symbol_id) {
+            Some(s) => s,
+            None => {
+                let error = ResolutionError::TypeNotFound {
+                    name: name.clone(),
+                    span: Span::new(0, 0),
+                    scope_id: self.current_scope,
+                };
+                self.add_error(error.clone());
+                return Err(error);
+            }
+        };
 
         // Check that the symbol is actually a type
         match symbol.kind() {
             SymbolKind::Interface | SymbolKind::TypeAlias | SymbolKind::Enum => {
                 // Get the type ID from the symbol
-                let type_id = symbol.type_id()
-                    .ok_or_else(|| ResolutionError::NotAType(name.clone()))?;
+                let type_id = match symbol.type_id() {
+                    Some(id) => id,
+                    None => {
+                        let error = ResolutionError::NotAType {
+                            name: name.clone(),
+                            found_kind: format!("{:?}", symbol.kind()),
+                            span: Span::new(0, 0),
+                        };
+                        self.add_error(error.clone());
+                        return Err(error);
+                    }
+                };
 
                 // Resolve type arguments if this is a generic type
                 let resolved_args = self.resolve_type_args(type_args)?;
@@ -100,17 +149,30 @@ impl<'a> TypeResolver<'a> {
                     let base_type_id = type_id;
 
                     // First get the base type and check what kind it is
-                    let base_type = self.type_interner.get(base_type_id)
-                        .ok_or_else(|| ResolutionError::TypeNotFound(name.clone()))?;
+                    let base_type = match self.type_interner.get(base_type_id) {
+                        Some(t) => t,
+                        None => {
+                            let error = ResolutionError::TypeNotFound {
+                                name: name.clone(),
+                                span: Span::new(0, 0),
+                                scope_id: self.current_scope,
+                            };
+                            self.add_error(error.clone());
+                            return Err(error);
+                        }
+                    };
 
                     match base_type {
                         Type::Function { type_params, .. } => {
                             if type_params.len() != resolved_args.len() {
-                                return Err(ResolutionError::GenericArityMismatch {
+                                let error = ResolutionError::GenericArityMismatch {
                                     name: name.clone(),
                                     expected: type_params.len(),
                                     actual: resolved_args.len(),
-                                });
+                                    span: Span::new(0, 0),
+                                };
+                                self.add_error(error.clone());
+                                return Err(error);
                             }
 
                             // Clone type_params to release immutable borrow of interner
@@ -139,11 +201,14 @@ impl<'a> TypeResolver<'a> {
                         }
                         _ => {
                             // If the base type isn't generic but we have arguments, it's an error
-                            return Err(ResolutionError::GenericArityMismatch {
+                            let error = ResolutionError::GenericArityMismatch {
                                 name: name.clone(),
                                 expected: 0,
                                 actual: resolved_args.len(),
-                            });
+                                span: Span::new(0, 0),
+                            };
+                            self.add_error(error.clone());
+                            return Err(error);
                         }
                     }
                 } else {
@@ -159,7 +224,15 @@ impl<'a> TypeResolver<'a> {
 
                 Ok(final_type_id)
             }
-            _ => Err(ResolutionError::NotAType(name.clone())),
+            _ => {
+                let error = ResolutionError::NotAType {
+                    name: name.clone(),
+                    found_kind: format!("{:?}", symbol.kind()),
+                    span: Span::new(0, 0),
+                };
+                self.add_error(error.clone());
+                Err(error)
+            }
         }
     }
 
@@ -174,6 +247,9 @@ impl<'a> TypeResolver<'a> {
     }
 
     /// Resolve any type, recursively resolving references.
+    ///
+    /// This method collects errors but attempts to continue resolution
+    /// where possible, returning TypeId::ERROR for failed resolutions.
     pub fn resolve_type(&mut self, ty: &Type) -> ResolutionResult<TypeId> {
         match ty {
             Type::Reference { .. } => self.resolve_type_reference(ty),
@@ -290,10 +366,19 @@ impl<'a> TypeResolver<'a> {
                     .collect();
                 let resolved_args = resolved_args?;
 
-                // Now resolve base type
-                let base_ty = self.type_interner.get(base_id)
-                    .ok_or_else(|| ResolutionError::TypeNotFound("Generic base type not found".to_string()))?
-                    .clone();
+                // Now resolve base type - clone to avoid borrow conflict
+                let base_ty = match self.type_interner.get(base_id) {
+                    Some(t) => t.clone(),
+                    None => {
+                        let error = ResolutionError::TypeNotFound {
+                            name: "Generic base type".to_string(),
+                            span: Span::new(0, 0),
+                            scope_id: self.current_scope,
+                        };
+                        self.add_error(error.clone());
+                        return Err(error);
+                    }
+                };
                 let resolved_base = self.resolve_type(&base_ty)?;
 
                 let arg_types: Vec<_> = resolved_args.iter()
@@ -321,6 +406,26 @@ impl<'a> TypeResolver<'a> {
     /// Set the current scope.
     pub fn set_current_scope(&mut self, scope: ScopeId) {
         self.current_scope = scope;
+    }
+
+    /// Add a resolution error to the error collection.
+    fn add_error(&mut self, error: ResolutionError) {
+        self.errors.push(error);
+    }
+
+    /// Take all collected errors, leaving the error vector empty.
+    pub fn take_errors(&mut self) -> Vec<ResolutionError> {
+        std::mem::take(&mut self.errors)
+    }
+
+    /// Get a reference to the collected errors.
+    pub fn errors(&self) -> &[ResolutionError] {
+        &self.errors
+    }
+
+    /// Check if any errors have been collected.
+    pub fn has_errors(&self) -> bool {
+        !self.errors.is_empty()
     }
 
     /// Get the span from a node or return a default span.
@@ -398,9 +503,14 @@ impl<'a, 'ast> Visitor<'ast> for TypeResolver<'a> {
                 let type_id = if let Some(type_annotation) = &decl.type_annotation {
                     // Convert TypeAnnotation to Type and resolve it
                     let type_value = self.type_annotation_to_type(type_annotation);
+                    let span = self.get_span(node);
                     match self.resolve_type(&type_value) {
                         Ok(id) => Some(id),
-                        Err(_) => None, // TODO: Collect errors instead of silently failing
+                        Err(e) => {
+                            // Collect the error and continue with Unknown type
+                            self.add_error(e);
+                            Some(self.type_interner.intern(Type::Primitive(PrimitiveType::Unknown)))
+                        }
                     }
                 } else {
                     // For now, use Unknown type if no annotation
@@ -440,9 +550,13 @@ impl<'a, 'ast> Visitor<'ast> for TypeResolver<'a> {
                     .map(|param| {
                         let ty = if let Some(type_annotation) = &param.type_annotation {
                             let type_value = self.type_annotation_to_type(type_annotation);
-                            self.resolve_type(&type_value).unwrap_or_else(|_| {
-                                self.type_interner.intern(Type::Primitive(PrimitiveType::Unknown))
-                            })
+                            match self.resolve_type(&type_value) {
+                                Ok(id) => id,
+                                Err(e) => {
+                                    self.add_error(e);
+                                    self.type_interner.intern(Type::Primitive(PrimitiveType::Unknown))
+                                }
+                            }
                         } else {
                             self.type_interner.intern(Type::Primitive(PrimitiveType::Unknown))
                         };
@@ -452,8 +566,13 @@ impl<'a, 'ast> Visitor<'ast> for TypeResolver<'a> {
 
                 let return_ty = if let Some(rt) = return_type {
                     let type_value = self.type_annotation_to_type(rt);
-                    self.resolve_type(&type_value).ok()
-                        .map(|id| Box::new(self.type_interner.get(id).unwrap().clone()))
+                    match self.resolve_type(&type_value) {
+                        Ok(id) => Some(Box::new(self.type_interner.get(id).unwrap().clone())),
+                        Err(e) => {
+                            self.add_error(e);
+                            Some(Box::new(Type::Primitive(PrimitiveType::Unknown)))
+                        }
+                    }
                 } else {
                     None
                 };
@@ -489,22 +608,418 @@ pub type ResolutionResult<T = TypeId> = Result<T, ResolutionError>;
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ResolutionError {
     /// Named type was not found in scope
-    #[error("type `{0}` not found in scope")]
-    TypeNotFound(String),
+    #[error("type `{name}` not found in scope")]
+    TypeNotFound {
+        name: String,
+        span: Span,
+        scope_id: ScopeId,
+    },
 
     /// Reference refers to a non-type symbol
-    #[error("`{0}` is not a type")]
-    NotAType(String),
+    #[error("`{name}` is not a type (found {found_kind} instead)")]
+    NotAType {
+        name: String,
+        found_kind: String,
+        span: Span,
+    },
 
     /// Generic reference has wrong number of arguments
-    #[error("type `{name}` expects {expected} type arguments, got {actual}")]
+    #[error("type `{name}` expects {expected} type argument(s), got {actual}")]
     GenericArityMismatch {
         name: String,
         expected: usize,
         actual: usize,
+        span: Span,
     },
 
     /// Recursive type reference without proper indirection
-    #[error("recursive type reference to `{0}`")]
-    RecursiveReference(String),
+    #[error("recursive type reference to `{name}`")]
+    RecursiveReference {
+        name: String,
+        span: Span,
+        scope_id: ScopeId,
+    },
+
+    /// Invalid type annotation syntax
+    #[error("invalid type annotation: {message}")]
+    InvalidAnnotation {
+        message: String,
+        span: Span,
+    },
+}
+
+impl ResolutionError {
+    /// Get the span where this error occurred.
+    pub fn span(&self) -> Span {
+        match self {
+            ResolutionError::TypeNotFound { span, .. } => *span,
+            ResolutionError::NotAType { span, .. } => *span,
+            ResolutionError::GenericArityMismatch { span, .. } => *span,
+            ResolutionError::RecursiveReference { span, .. } => *span,
+            ResolutionError::InvalidAnnotation { span, .. } => *span,
+        }
+    }
+
+    /// Get the scope ID where this error occurred, if available.
+    pub fn scope_id(&self) -> Option<ScopeId> {
+        match self {
+            ResolutionError::TypeNotFound { scope_id, .. } => Some(*scope_id),
+            ResolutionError::RecursiveReference { scope_id, .. } => Some(*scope_id),
+            _ => None,
+        }
+    }
+
+    /// Get an error code for IDE integration.
+    pub fn error_code(&self) -> &'static str {
+        match self {
+            ResolutionError::TypeNotFound { .. } => "TS2304",
+            ResolutionError::NotAType { .. } => "TS2304",
+            ResolutionError::GenericArityMismatch { .. } => "TS2314",
+            ResolutionError::RecursiveReference { .. } => "TS2456",
+            ResolutionError::InvalidAnnotation { .. } => "TS1003",
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::semantic::scope::{ScopeId, ScopeTable};
+    use crate::semantic::symbol::{SymbolKind, SymbolTable};
+
+    #[test]
+    fn test_error_collection_not_found() {
+        let mut symbol_table = SymbolTable::new();
+        let mut scope_table = ScopeTable::new(crate::parser::ast::Span::new(0, 0));
+        let mut type_interner = TypeInterner::new();
+        let root_scope = scope_table.root();
+
+        // Create a TypeResolver
+        let mut resolver = TypeResolver::new(
+            &mut symbol_table,
+            &scope_table,
+            &mut type_interner,
+            root_scope,
+        );
+
+        // Try to resolve a type that doesn't exist
+        let unknown_type = Type::Reference {
+            name: "UnknownType".to_string(),
+            type_args: vec![],
+        };
+
+        let result = resolver.resolve_type(&unknown_type);
+        assert!(result.is_err());
+
+        // Check that error was collected
+        assert!(resolver.has_errors());
+        assert_eq!(resolver.errors().len(), 1);
+
+        let errors = resolver.take_errors();
+        assert_eq!(errors.len(), 1);
+        match &errors[0] {
+            ResolutionError::TypeNotFound { name, .. } => {
+                assert_eq!(name, "UnknownType");
+            }
+            _ => panic!("Expected TypeNotFound error"),
+        }
+    }
+
+    #[test]
+    fn test_error_collection_not_a_type() {
+        use crate::parser::ast::Span;
+        let mut symbol_table = SymbolTable::new();
+        let mut scope_table = ScopeTable::new(Span::new(0, 0));
+        let mut type_interner = TypeInterner::new();
+        let root_scope = scope_table.root();
+
+        // Add a variable symbol (not a type)
+        let var_id = symbol_table.insert(
+            "myVar".to_string(),
+            SymbolKind::Variable,
+            crate::parser::ast::Span::new(0, 0),
+            root_scope,
+            None,
+        );
+
+        // Create a TypeResolver
+        let mut resolver = TypeResolver::new(
+            &mut symbol_table,
+            &scope_table,
+            &mut type_interner,
+            root_scope,
+        );
+
+        // Try to resolve "myVar" as a type
+        let var_type = Type::Reference {
+            name: "myVar".to_string(),
+            type_args: vec![],
+        };
+
+        let result = resolver.resolve_type(&var_type);
+        assert!(result.is_err());
+
+        // Check that error was collected
+        assert!(resolver.has_errors());
+        assert_eq!(resolver.errors().len(), 1);
+
+        let errors = resolver.take_errors();
+        assert_eq!(errors.len(), 1);
+        match &errors[0] {
+            ResolutionError::NotAType { name, .. } => {
+                assert_eq!(name, "myVar");
+            }
+            _ => panic!("Expected NotAType error"),
+        }
+    }
+
+    #[test]
+    fn test_error_collection_generic_arity_mismatch() {
+        use crate::parser::ast::Span;
+        let mut symbol_table = SymbolTable::new();
+        let mut scope_table = ScopeTable::new(Span::new(0, 0));
+        let mut type_interner = TypeInterner::new();
+        let root_scope = scope_table.root();
+
+        // Add an interface type with 1 type parameter
+        let interface_type = Type::Function {
+            params: vec![],
+            return_type: Box::new(Type::Primitive(PrimitiveType::Unknown)),
+            type_params: vec![TypeParameter {
+                name: "T".to_string(),
+                constraint: None,
+                default: None,
+            }],
+        };
+        let interface_id = type_interner.intern(interface_type);
+
+        let interface_symbol = symbol_table.insert(
+            "MyInterface".to_string(),
+            SymbolKind::Interface,
+            crate::parser::ast::Span::new(0, 0),
+            root_scope,
+            Some(interface_id),
+        );
+
+        // Create a TypeResolver
+        let mut resolver = TypeResolver::new(
+            &mut symbol_table,
+            &scope_table,
+            &mut type_interner,
+            root_scope,
+        );
+
+        // Try to use the interface with 2 type arguments (expects 1)
+        let invalid_generic = Type::Reference {
+            name: "MyInterface".to_string(),
+            type_args: vec![
+                Type::Primitive(PrimitiveType::String),
+                Type::Primitive(PrimitiveType::Number),
+            ],
+        };
+
+        let result = resolver.resolve_type(&invalid_generic);
+        assert!(result.is_err());
+
+        // Check that error was collected
+        assert!(resolver.has_errors());
+        assert_eq!(resolver.errors().len(), 1);
+
+        let errors = resolver.take_errors();
+        assert_eq!(errors.len(), 1);
+        match &errors[0] {
+            ResolutionError::GenericArityMismatch { name, expected, actual, .. } => {
+                assert_eq!(name, "MyInterface");
+                assert_eq!(*expected, 1);
+                assert_eq!(*actual, 2);
+            }
+            _ => panic!("Expected GenericArityMismatch error"),
+        }
+    }
+
+    #[test]
+    fn test_error_collection_recursive_reference() {
+        use crate::parser::ast::Span;
+        let mut symbol_table = SymbolTable::new();
+        let mut scope_table = ScopeTable::new(Span::new(0, 0));
+        let mut type_interner = TypeInterner::new();
+        let root_scope = scope_table.root();
+
+        // Create a type that references itself
+        let self_ref_type = Type::Reference {
+            name: "SelfRef".to_string(),
+            type_args: vec![],
+        };
+        let type_id = type_interner.intern(self_ref_type);
+
+        let symbol_id = symbol_table.insert(
+            "SelfRef".to_string(),
+            SymbolKind::Interface,
+            crate::parser::ast::Span::new(0, 0),
+            root_scope,
+            Some(type_id),
+        );
+
+        // Create a TypeResolver
+        let mut resolver = TypeResolver::new(
+            &mut symbol_table,
+            &scope_table,
+            &mut type_interner,
+            root_scope,
+        );
+
+        // Try to resolve the self-referencing type
+        let result = resolver.resolve_type(&Type::Reference {
+            name: "SelfRef".to_string(),
+            type_args: vec![],
+        });
+
+        // Should get an error due to recursive reference
+        assert!(result.is_err());
+
+        // Check that error was collected
+        assert!(resolver.has_errors());
+        assert_eq!(resolver.errors().len(), 1);
+
+        let errors = resolver.take_errors();
+        assert_eq!(errors.len(), 1);
+        match &errors[0] {
+            ResolutionError::RecursiveReference { name, .. } => {
+                assert_eq!(name, "SelfRef");
+            }
+            _ => panic!("Expected RecursiveReference error"),
+        }
+    }
+
+    #[test]
+    fn test_error_collection_multiple_errors() {
+        use crate::parser::ast::Span;
+        let mut symbol_table = SymbolTable::new();
+        let mut scope_table = ScopeTable::new(Span::new(0, 0));
+        let mut type_interner = TypeInterner::new();
+        let root_scope = scope_table.root();
+
+        // Create a TypeResolver
+        let mut resolver = TypeResolver::new(
+            &mut symbol_table,
+            &scope_table,
+            &mut type_interner,
+            root_scope,
+        );
+
+        // Try to resolve multiple unknown types
+        let unknown1 = Type::Reference {
+            name: "UnknownType1".to_string(),
+            type_args: vec![],
+        };
+        let unknown2 = Type::Reference {
+            name: "UnknownType2".to_string(),
+            type_args: vec![],
+        };
+        let unknown3 = Type::Reference {
+            name: "UnknownType3".to_string(),
+            type_args: vec![],
+        };
+
+        resolver.resolve_type(&unknown1);
+        resolver.resolve_type(&unknown2);
+        resolver.resolve_type(&unknown3);
+
+        // Check that all errors were collected
+        assert!(resolver.has_errors());
+        assert_eq!(resolver.errors().len(), 3);
+
+        let errors = resolver.take_errors();
+        assert_eq!(errors.len(), 3);
+
+        // Verify each error
+        match &errors[0] {
+            ResolutionError::TypeNotFound { name, .. } => assert_eq!(name, "UnknownType1"),
+            _ => panic!("Expected TypeNotFound for UnknownType1"),
+        }
+        match &errors[1] {
+            ResolutionError::TypeNotFound { name, .. } => assert_eq!(name, "UnknownType2"),
+            _ => panic!("Expected TypeNotFound for UnknownType2"),
+        }
+        match &errors[2] {
+            ResolutionError::TypeNotFound { name, .. } => assert_eq!(name, "UnknownType3"),
+            _ => panic!("Expected TypeNotFound for UnknownType3"),
+        }
+    }
+
+    #[test]
+    fn test_error_take_clears_errors() {
+        use crate::parser::ast::Span;
+        let mut symbol_table = SymbolTable::new();
+        let mut scope_table = ScopeTable::new(Span::new(0, 0));
+        let mut type_interner = TypeInterner::new();
+        let root_scope = scope_table.root();
+
+        // Create a TypeResolver
+        let mut resolver = TypeResolver::new(
+            &mut symbol_table,
+            &scope_table,
+            &mut type_interner,
+            root_scope,
+        );
+
+        // Generate an error
+        let unknown_type = Type::Reference {
+            name: "UnknownType".to_string(),
+            type_args: vec![],
+        };
+        resolver.resolve_type(&unknown_type);
+
+        // Check error exists
+        assert!(resolver.has_errors());
+        assert_eq!(resolver.errors().len(), 1);
+
+        // Take errors
+        let errors = resolver.take_errors();
+        assert_eq!(errors.len(), 1);
+
+        // Errors should be cleared
+        assert!(!resolver.has_errors());
+        assert_eq!(resolver.errors().len(), 0);
+    }
+
+    #[test]
+    fn test_error_code_generation() {
+        use crate::semantic::types::resolver::ResolutionError;
+
+        let error_not_found = ResolutionError::TypeNotFound {
+            name: "TestType".to_string(),
+            span: crate::parser::ast::Span::new(0, 0),
+            scope_id: ScopeId::new(0),
+        };
+        assert_eq!(error_not_found.error_code(), "TS2304");
+
+        let error_not_a_type = ResolutionError::NotAType {
+            name: "TestVar".to_string(),
+            found_kind: "Variable".to_string(),
+            span: crate::parser::ast::Span::new(0, 0),
+        };
+        assert_eq!(error_not_a_type.error_code(), "TS2304");
+
+        let error_arity = ResolutionError::GenericArityMismatch {
+            name: "TestType".to_string(),
+            expected: 1,
+            actual: 2,
+            span: crate::parser::ast::Span::new(0, 0),
+        };
+        assert_eq!(error_arity.error_code(), "TS2314");
+
+        let error_recursive = ResolutionError::RecursiveReference {
+            name: "TestType".to_string(),
+            span: crate::parser::ast::Span::new(0, 0),
+            scope_id: ScopeId::new(0),
+        };
+        assert_eq!(error_recursive.error_code(), "TS2456");
+
+        let error_invalid = ResolutionError::InvalidAnnotation {
+            message: "test error".to_string(),
+            span: crate::parser::ast::Span::new(0, 0),
+        };
+        assert_eq!(error_invalid.error_code(), "TS1003");
+    }
 }
