@@ -3,8 +3,8 @@
 ## Current Position
 
 **Phase:** 03-semantic
-**Plan:** 03-02a
-**Status:** Wave 1 In Progress
+**Plan:** 03-01b
+**Status:** Complete
 
 ## Progress Bar
 
@@ -144,17 +144,31 @@ None
    - Enables seamless integration with type checking phase
    - Supports export flags for module exports
 
+### Wave 1: Scope & Symbol Table Implementation (03-01b)
+
+1. **Handle Option<Span> from AstNode with helper method**
+   - Sensible defaults for both span-enabled and disabled builds
+   - Ensures consistent span handling across all visitor methods
+
+2. **Catch clause handling in visit_try method**
+   - Since Visitor trait doesn't have separate visit_catch_clause method
+   - Properly creates catch scope for exception variables
+
+3. **SymbolKind::Variable for all variable types**
+   - Constness will be tracked in symbol flags in future iterations
+   - Aligns with existing SymbolKind enum variants
+
 ## Issues
 
 None
 
-## Session: Wave 03-01a
+## Session: Wave 03-01b
 
-**Last session:** 2026-03-07
-**Stopped at:** Wave 1 complete, 03-01a-SUMMARY.md created
-**Duration:** 15 minutes
-**Commit:** 949d813
+**Last session:** 2026-03-08
+**Stopped at:** Wave 1 complete, 03-01b-SUMMARY.md created
+**Duration:** 45 minutes
+**Commit:** e49917f
 
 ## Last Commit
 
-**3437b65** - fix(03-semantic-01a): add missing implementations for compilation
+**e49917f** - feat(03-semantic-01b): implement ScopeAnalyzer visitor
