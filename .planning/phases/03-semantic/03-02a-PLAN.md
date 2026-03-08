@@ -1,23 +1,20 @@
 ---
 phase: 03-semantic
-plan: 02
+plan: 02a
 type: execute
-wave: 1
-depends_on: []
+wave: 2
+depends_on: ["03-00"]
 files_modified:
   - src/semantic/types/mod.rs
   - src/semantic/types/representation.rs
   - src/semantic/types/interner.rs
-  - src/semantic/types/unify.rs
 autonomous: true
 requirements: []
 must_haves:
   truths:
     - "Type system supports all TypeScript primitive and composite types"
     - "Types are interned with unique identifiers for fast comparison"
-    - "Type compatibility checking follows TypeScript rules"
-    - "Generic types with type parameters are supported"
-    - "Type substitution for generics works correctly"
+    - "Type interner correctly deduplicates identical types"
   artifacts:
     - path: "src/semantic/types/representation.rs"
       provides: "Type data structure with all TypeScript type variants"
@@ -25,25 +22,18 @@ must_haves:
     - path: "src/semantic/types/interner.rs"
       provides: "Type interner using lasso for deduplication"
       exports: "pub struct TypeInterner"
-    - path: "src/semantic/types/unify.rs"
-      provides: "Type compatibility checking according to TypeScript rules"
-      exports: "pub fn is_subtype(a: TypeId, b: TypeId, interner: &TypeInterner) -> bool"
   key_links:
     - from: "src/semantic/types/interner.rs"
       to: "lasso::Rodeo"
       via: "Type interning implementation"
       pattern: "Rodeo<Type, TypeId>"
-    - from: "src/semantic/types/unify.rs"
-      to: "src/semantic/types/representation.rs"
-      via: "Type variant matching"
-      pattern: "match interner.get(a)"
 ---
 
 <objective>
-Implement type system infrastructure with interning and TypeScript-compatible type checking.
+Implement type representation and interning infrastructure for the TypeScript type system.
 
-Purpose: Provide a robust type representation and checking system that accurately models TypeScript semantics for downstream code generation.
-Output: Fully functional type system with interning, type representation, and compatibility checking.
+Purpose: Create the foundational type system components that enable efficient type representation and comparison.
+Output: Complete type representation enum and type interner with deduplication support.
 </objective>
 
 <execution_context>
@@ -80,9 +70,12 @@ impl<K: Key, S: BuildHasher> Rodeo<K, S> {
        - pub mod representation;
        - pub mod interner;
        - pub mod unify;
+       - pub mod resolver;
        - pub use representation::*;
        - pub use interner::*;
        - pub use unify::*;
+       - pub use resolver::*;
+       - #[cfg(test)] mod tests;
   </action>
   <verify>
     <automated>cargo build</automated>
@@ -110,7 +103,7 @@ impl<K: Key, S: BuildHasher> Rodeo<K, S> {
     4. Implement Eq, PartialEq, Hash for Type (note: types are compared by TypeId, not structural equality)
   </action>
   <verify>
-    <automated>cargo test semantic::types::representation</automated>
+    <automated>cargo test semantic::types::tests::representation</automated>
   </verify>
   <done>Type enum defined with all required TypeScript type variants</done>
 </task>
@@ -131,48 +124,27 @@ impl<K: Key, S: BuildHasher> Rodeo<K, S> {
     4. Ensure types are immutable once interned
   </action>
   <verify>
-    <automated>cargo test semantic::types::interner</automated>
+    <automated>cargo test semantic::types::tests::interner</automated>
   </verify>
   <done>Type interner implemented with deduplication and fast lookup</done>
-</task>
-
-<task type="auto">
-  <name>Task 4: Implement type compatibility checking</name>
-  <files>src/semantic/types/unify.rs</files>
-  <action>
-    1. Implement is_subtype(a: TypeId, b: TypeId, interner: &TypeInterner) -> bool following TypeScript rules:
-       - Primitive types: string <: unknown, number <: unknown, etc.
-       - Union types: A <: B | C if A <: B or A <: C
-       - Intersection types: A & B <: A and A & B <: B
-       - Function types: parameter contravariance, return type covariance
-       - Object types: structural typing (extra properties allowed)
-       - Array types: covariant element types (matching TypeScript behavior)
-       - Generic types: type parameter variance according to usage
-    2. Implement type substitution for generics: substitute_type_params(ty: TypeId, substitutions: &FxHashMap<TypeId, TypeId>, interner: &mut TypeInterner) -> TypeId
-  </action>
-  <verify>
-    <automated>cargo test semantic::types::unify</automated>
-  </verify>
-  <done>Type checking correctly implements TypeScript compatibility rules</done>
 </task>
 
 </tasks>
 
 <verification>
-Run the full type system test suite:
+Run type representation and interner tests:
 ```bash
-cargo test semantic::types --no-fail-fast
+cargo test semantic::types::tests::representation semantic::types::tests::interner --no-fail-fast
 ```
 </verification>
 
 <success_criteria>
 - All TypeScript type variants are correctly represented
 - Type interning deduplicates identical types
-- Type compatibility checking follows TypeScript semantics exactly
-- Generic type substitution works correctly for type parameters
-- Performance is optimized for frequent type comparisons and lookups
+- Type comparisons by TypeId are fast and correct
+- All tests for representation and interner pass
 </success_criteria>
 
 <output>
-After completion, create `.planning/phases/03-semantic/03-02-SUMMARY.md`
+After completion, create `.planning/phases/03-semantic/03-02a-SUMMARY.md`
 </output>

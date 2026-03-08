@@ -1,9 +1,9 @@
 ---
 phase: 03-semantic
-plan: 03
+plan: 03a
 type: execute
-wave: 2
-depends_on: ["03-01", "03-02"]
+wave: 3
+depends_on: ["03-00", "03-01a", "03-02a"]
 files_modified:
   - src/semantic/flow/mod.rs
   - src/semantic/flow/cfg.rs
@@ -13,7 +13,6 @@ files_modified:
   - src/semantic/ir/module.rs
   - src/semantic/ir/function.rs
   - src/semantic/ir/instruction.rs
-  - src/semantic/analyzer.rs
 autonomous: true
 requirements: []
 must_haves:
@@ -22,7 +21,6 @@ must_haves:
     - "Basic blocks have terminator instructions (br, condbr, ret)"
     - "Dominator tree is calculated for each CFG"
     - "IR represents all TypeScript statements and expressions in a structured format"
-    - "Main semantic analyzer coordinates all analysis passes"
   artifacts:
     - path: "src/semantic/flow/cfg.rs"
       provides: "Control Flow Graph and Basic Block data structures"
@@ -33,29 +31,18 @@ must_haves:
     - path: "src/semantic/ir/instruction.rs"
       provides: "IR instruction definitions"
       contains: "enum Instruction { Add, Sub, Mul, Div, Load, Store, Call, Br, CondBr, Ret, ... }"
-    - path: "src/semantic/analyzer.rs"
-      provides: "Main semantic analyzer coordinator"
-      exports: "pub struct SemanticAnalyzer"
   key_links:
     - from: "src/semantic/flow/builder.rs"
       to: "src/parser/ast/visitor.rs"
       via: "Visitor trait implementation"
       pattern: "impl<'a> Visitor<'a> for CFGBuilder"
-    - from: "src/semantic/analyzer.rs"
-      to: "src/semantic/scope/analyzer.rs"
-      via: "Scope analysis pass"
-      pattern: "scope_analyzer.analyze(ast)"
-    - from: "src/semantic/analyzer.rs"
-      to: "src/semantic/flow/builder.rs"
-      via: "CFG construction pass"
-      pattern: "cfg_builder.build(ast)"
 ---
 
 <objective>
-Implement Control Flow Analysis (CFG) and Intermediate Representation (IR) construction, plus the main semantic analyzer coordinator.
+Implement Control Flow Graph (CFG) construction and Intermediate Representation (IR) infrastructure.
 
-Purpose: Convert parsed AST into a structured semantic IR that captures control flow and program semantics for downstream refactoring and code generation.
-Output: Complete semantic analysis pipeline that produces a semantic module with scope, symbols, types, and CFG information.
+Purpose: Create the low-level IR and CFG components that represent program structure and control flow.
+Output: Complete IR representation and CFG builder for TypeScript code.
 </objective>
 
 <execution_context>
@@ -67,9 +54,9 @@ Output: Complete semantic analysis pipeline that produces a semantic module with
 @.planning/PROJECT.md
 @.planning/ROADMAP.md
 @.planning/STATE.md
-@.planning/phases/03-semantic/03-01-PLAN.md
-@.planning/phases/03-semantic/03-02-PLAN.md
 @src/parser/ast/visitor.rs
+@.planning/phases/03-semantic/03-01a-PLAN.md
+@.planning/phases/03-semantic/03-02a-PLAN.md
 
 <interfaces>
 <!-- Required types from prior plans -->
@@ -90,6 +77,15 @@ From src/semantic/types/representation.rs:
 pub struct TypeId(u32);
 pub struct TypeInterner;
 ```
+
+<!-- AST Visitor -->
+From src/parser/ast/visitor.rs:
+```rust
+pub trait Visitor<'a> {
+    fn visit_node(&mut self, node: &'a AstNode<'a>);
+    // ... other visit methods
+}
+```
 </interfaces>
 </context>
 
@@ -106,6 +102,7 @@ pub struct TypeInterner;
        - pub use cfg::*;
        - pub use builder::*;
        - pub use dominance::*;
+       - #[cfg(test)] mod tests;
     2. Create src/semantic/ir/mod.rs with:
        - pub mod module;
        - pub mod function;
@@ -113,6 +110,7 @@ pub struct TypeInterner;
        - pub use module::*;
        - pub use function::*;
        - pub use instruction::*;
+       - #[cfg(test)] mod tests;
   </action>
   <verify>
     <automated>cargo build</automated>
@@ -142,14 +140,14 @@ pub struct TypeInterner;
     5. Define SemanticModule struct with name: String, functions: Vec&lt;Function&gt;, types: TypeInterner, symbols: SymbolTable, scopes: ScopeTable
   </action>
   <verify>
-    <automated>cargo test semantic::ir</automated>
+    <automated>cargo test semantic::ir::tests::ir_basics</automated>
   </verify>
   <done>IR representation implemented with instructions, basic blocks, functions, and modules</done>
 </task>
 
 <task type="auto">
   <name>Task 3: Implement Control Flow Graph builder</name>
-  <files>src/semantic/flow/cfg.rs, src/semantic/flow/builder.rs</files>
+  <files>src/semantic/flow/cfg.rs, src/semantic/flow/builder.rs, src/semantic/flow/dominance.rs</files>
   <action>
     1. Define BasicBlockId as newtype around u32
     2. Define ControlFlowGraph struct with blocks: Vec&lt;BasicBlock&gt;, entry: BasicBlockId, exit: BasicBlockId
@@ -163,51 +161,27 @@ pub struct TypeInterner;
     4. Implement dominator tree calculation in dominance.rs using the standard iterative algorithm
   </action>
   <verify>
-    <automated>cargo test semantic::flow</automated>
+    <automated>cargo test semantic::flow::tests::cfg_builder</automated>
   </verify>
   <done>CFG builder correctly constructs control flow graphs with proper terminators and dominator information</done>
-</task>
-
-<task type="auto">
-  <name>Task 4: Implement main SemanticAnalyzer coordinator</name>
-  <files>src/semantic/analyzer.rs, src/semantic/mod.rs</files>
-  <action>
-    1. Define SemanticAnalyzer struct with arena: &'a bumpalo::Bump, type_interner: TypeInterner, scope_table: ScopeTable, symbol_table: SymbolTable
-    2. Implement analyze method that:
-       - Runs ScopeAnalyzer to build scope hierarchy and symbol table
-       - Runs TypeAnalyzer to resolve types for all expressions and statements
-       - Runs CFGBuilder to build control flow graphs for all functions
-       - Constructs the final SemanticModule with all analysis results
-    3. Export the main API from src/semantic/mod.rs: pub fn analyze(ast: &AstNode, arena: &bumpalo::Bump) -> Result&lt;SemanticModule&gt;
-  </action>
-  <verify>
-    <automated>cargo test semantic::analyzer</automated>
-  </verify>
-  <done>Main semantic analyzer coordinates all passes and produces a complete SemanticModule</done>
 </task>
 
 </tasks>
 
 <verification>
-Run the full semantic analysis test suite:
+Run IR and CFG tests:
 ```bash
-cargo test semantic --no-fail-fast
-```
-
-Verify end-to-end analysis of a sample TypeScript file:
-```bash
-cargo run -- analyze tests/fixtures/original/simple-function.ts
+cargo test semantic::ir semantic::flow --no-fail-fast
 ```
 </verification>
 
 <success_criteria>
+- IR representation captures all program semantics accurately
 - CFG is correctly built for all function bodies with proper basic block structure
 - Dominator tree calculation is accurate for control flow analysis
-- IR representation captures all program semantics accurately
-- Main analyzer coordinates all passes successfully
-- Complete semantic module is produced with scope, symbol, type, and CFG information
+- All IR and CFG tests pass successfully
 </success_criteria>
 
 <output>
-After completion, create `.planning/phases/03-semantic/03-03-SUMMARY.md`
+After completion, create `.planning/phases/03-semantic/03-03a-SUMMARY.md`
 </output>

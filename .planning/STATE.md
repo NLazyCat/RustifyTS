@@ -103,6 +103,9 @@ The following gap closure plans have been created to address verification gaps:
   - Summary: 03-GAP-02-SUMMARY.md
   - Status: Complete
 - [x] 03-GAP-03: CFG Integration into Main Analyzer (Wave 2)
+  - Commit: eb3c7a1 (implementation)
+  - Summary: 03-GAP-03-SUMMARY.md
+  - Status: Complete
 - [x] 03-GAP-04: Function Parameter Handling (Wave 2)
   - Commit: 6ddde24 (implementation and tests)
   - Summary: 03-GAP-04-SUMMARY.md
