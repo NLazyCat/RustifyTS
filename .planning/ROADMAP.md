@@ -71,25 +71,35 @@ pub struct AstNode {
 ---
 
 ### Phase 03: 语义分析层
-**状态:** 🟢 进行中 (4/7 waves 完成)
+**状态:** 🟡 Gap Closure (8 gap plans created, awaiting execution)
 **目标:** 实现基础 IR 构建
 
 **Waves Progress:**
 - [x] Wave 0: Test Infrastructure (03-00)
 - [x] Wave 1: Core Data Structures (03-01a)
 - [x] Wave 1: Core Data Structures (03-02a)
-- [x] Wave 2: IR & CFG Construction (03-03a) ✅ 刚完成
-- [ ] Wave 2: Analysis Implementations (03-02b)
-- [ ] Wave 3: Main Analyzer & Integration (03-03b)
+- [x] Wave 2: IR & CFG Construction (03-03a)
+- [x] Wave 2: Analysis Implementations (03-02b)
+- [x] Wave 3: Main Analyzer & Integration (03-03b)
 
-**Plans:** 7/7 plans complete
+**Plans:** 7/7 implementation plans complete, 8/8 gap closure plans created
 - [x] 03-00-PLAN.md — Test infrastructure and skeleton files (8c7096b)
 - [x] 03-01a-PLAN.md — Scope and Symbol data structures (7820cc5)
 - [x] 03-01b-PLAN.md — Symbol Table and Scope Analyzer (e49917f)
 - [x] 03-02a-PLAN.md — Type representation and interner
-- [ ] 03-02b-PLAN.md — Type compatibility checking and resolution
-- [x] 03-03a-PLAN.md — IR and CFG implementation (e825ced) ✅ 刚完成
-- [ ] 03-03b-PLAN.md — Main analyzer coordinator and integration
+- [x] 03-02b-PLAN.md — Type compatibility checking and resolution (8c6c17b)
+- [x] 03-03a-PLAN.md — IR and CFG implementation (5a0f3d1)
+- [x] 03-03b-PLAN.md — Main analyzer coordinator and integration (220fa29)
+
+**Gap Closure Plans (Awaiting Execution):**
+- [x] 03-GAP-01-PLAN.md — Type Unification Implementation (Complete - 31bf788)
+- [ ] 03-GAP-02-PLAN.md — Type Assignability Check Implementation
+- [ ] 03-GAP-03-PLAN.md — CFG Integration into Main Analyzer
+- [ ] 03-GAP-04-PLAN.md — Function Parameter Handling
+- [ ] 03-GAP-05-PLAN.md — Exception Parameter Handling
+- [ ] 03-GAP-06-PLAN.md — Class Type Information Extraction
+- [ ] 03-GAP-07-PLAN.md — Generic Type Variance Support
+- [ ] 03-GAP-08-PLAN.md — Type Resolution Error Collection
 
 **交付物:**
 - `src/semantic/mod.rs` - 模块接口
@@ -142,26 +152,42 @@ pub enum Type {
 ---
 
 ### Phase 04: 语义重构核心层
-**状态:** 🔴 未开始
+**状态:** 🟡 规划完成 (3/3 waves planned)
 **目标:** 实现 RRA、OA、SR 和部分推导算法
 
-**交付物:**
-- `src/refactor/mod.rs` - 模块接口
-- `src/refactor/context/mod.rs` - 分析上下文
-- `src/refactor/context/context.rs` - AnalysisContext
-- `src/refactor/rra/mod.rs` - 引用关系分析器
-- `src/refactor/rra/analyzer.rs` - RRA 实现
-- `src/refactor/oa/mod.rs` - 所有权标注器
-- `src/refactor/oa/annotator.rs` - OA 实现
-- `src/refactor/sr/mod.rs` - 语义重写器
-- `src/refactor/sr/rewriter.rs` - SR 实现
-- `src/refactor/traits/mod.rs` - 算法接口
-- `src/refactor/traits/analyzer.rs` - SemanticAnalyzer trait
+**Waves Progress:**
+- [ ] Wave 1: AnalysisContext and Analyzer Traits (04-01-PLAN.md) - 2 days
+- [ ] Wave 2: RRA and Dataflow Framework (04-02-PLAN.md) - 3 days
+- [ ] Wave 3: OA, SR, and Derivation Algorithms (04-03-PLAN.md) - 3 days
 
-**算法实现 (第一批):**
-- `src/refactor/algorithms/01_ownership.rs` - 所有权推导
-- `src/refactor/algorithms/02_lifetime.rs` - 生命周期推导
-- `src/refactor/algorithms/03_mutability.rs` - 可变性推导
+**Plans:** 3/3 waves planned
+- [x] 04-01-PLAN.md — AnalysisContext, SemanticAnalyzer trait, module structure
+- [x] 04-02-PLAN.md — Reference graph, dataflow framework, RRA analyzer
+- [x] 04-03-PLAN.md — Ownership annotator, semantic rewriter, derivation algorithms
+
+**交付物:**
+- `src/semantic/refactor/mod.rs` - 模块接口
+- `src/semantic/refactor/context/mod.rs` - 分析上下文
+- `src/semantic/refactor/context/context.rs` - AnalysisContext
+- `src/semantic/refactor/traits/mod.rs` - 算法接口
+- `src/semantic/refactor/traits/analyzer.rs` - SemanticAnalyzer trait
+- `src/semantic/refactor/dataflow/mod.rs` - 数据流框架
+- `src/semantic/refactor/dataflow/framework.rs` - DataflowEngine, Analysis trait
+- `src/semantic/refactor/rra/mod.rs` - 引用关系分析器
+- `src/semantic/refactor/rra/graph.rs` - ReferenceGraph, RefType, UsageInfo
+- `src/semantic/refactor/rra/analyzer.rs` - RRA 实现
+- `src/semantic/refactor/rra/summary.rs` - Inter-procedural summaries
+- `src/semantic/refactor/oa/mod.rs` - 所有权标注器
+- `src/semantic/refactor/oa/categories.rs` - OwnershipCategory, OwnershipAnnotation
+- `src/semantic/refactor/oa/annotator.rs` - OA 实现
+- `src/semantic/refactor/sr/mod.rs` - 语义重写器
+- `src/semantic/refactor/sr/rewriter.rs` - Rewriter trait, SemanticRewriter
+- `src/semantic/refactor/sr/rules.rs` - RewriteRule, RuleRegistry
+- `src/semantic/refactor/sr/history.rs` - TransformRecord, transformation history
+- `src/semantic/refactor/derive/mod.rs` - 推导算法
+- `src/semantic/refactor/derive/ownership.rs` - 所有权推导
+- `src/semantic/refactor/derive/lifetime.rs` - 生命周期推导
+- `src/semantic/refactor/derive/mutability.rs` - 可变性推导
 
 **核心 Trait:**
 ```rust
@@ -174,18 +200,22 @@ pub trait SemanticAnalyzer<R: AnalysisResult> {
 
 pub struct AnalysisContext {
     pub module: SemanticModule,
-    pub references: ReferenceAnalysis,
-    pub results: HashMap<(NodeId, TypeId), Box<dyn AnalysisResult>>,
+    pub results: FxHashMap<(NodeId, TypeId), Box<dyn AnalysisResult>>,
+    pub ir_version: u64,
+    pub cache_enabled: bool,
 }
 ```
 
 **测试:**
-- 所有权推导测试
-- 生命周期推导测试
-- 可变性推导测试
+- AnalysisContext 和 analyzer traits 测试
+- Reference graph 和 dataflow framework 测试
+- RRA analyzer 和 summaries 测试
+- Ownership annotator 测试
+- Semantic rewriter 测试
+- Derivation algorithms 测试
 
 **依赖:** Phase 03
-**估计时间:** 7 天
+**估计时间:** 8 天
 
 ---
 
