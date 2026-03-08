@@ -445,6 +445,25 @@ impl<'a> TypeResolver<'a> {
     fn type_annotation_to_type(&mut self, annotation: &TypeAnnotation) -> Type {
         match annotation {
             TypeAnnotation::TypeReference { name, type_params } => {
+                // Check for primitive types first
+                let primitive_type = match name.as_str() {
+                    "string" => Some(PrimitiveType::String),
+                    "number" => Some(PrimitiveType::Number),
+                    "boolean" => Some(PrimitiveType::Boolean),
+                    "void" => Some(PrimitiveType::Void),
+                    "any" => Some(PrimitiveType::Any),
+                    "unknown" => Some(PrimitiveType::Unknown),
+                    "null" => Some(PrimitiveType::Null),
+                    "undefined" => Some(PrimitiveType::Undefined),
+                    "never" => Some(PrimitiveType::Never),
+                    _ => None,
+                };
+
+                if let Some(prim) = primitive_type {
+                    return Type::Primitive(prim);
+                }
+
+                // Handle user-defined types (existing logic)
                 if let Some(params) = type_params {
                     let resolved_params: Vec<_> = params.iter()
                         .map(|p| self.type_annotation_to_type(p))
