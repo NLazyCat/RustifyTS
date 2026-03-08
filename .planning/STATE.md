@@ -3,14 +3,14 @@
 ## Current Position
 
 **Phase:** 03-semantic
-**Plan:** 03-02b
+**Plan:** 03-03b
 **Status:** Complete
 
 ## Progress Bar
 
 ```
 [████████████████] 6/6 waves complete (100%) - Parser Phase
-[████████████    ] 4/5 waves complete (80%) - Semantic Phase
+[███████████████] 5/5 waves complete (100%) - Semantic Phase
 ```
 
 ### Completed Waves
@@ -73,16 +73,21 @@
   - Summary: 03-02b-SUMMARY.md
   - Status: Complete
 
-### Current Wave
+- [x] Wave 2: IR & CFG Construction (03-03a)
+  - Files: src/semantic/ir/**/*, src/semantic/flow/**/*
+  - Commit: 5a0f3d1
+  - Summary: 03-03a-SUMMARY.md
+  - Status: Complete
 
-- [ ] Wave 2: IR & CFG Construction (03-03a)
-  - Status: Not Started
-  - Prerequisites: Wave 1 Analysis Implementations complete
+- [x] Wave 3: Main Analyzer & Integration (03-03b)
+  - Files: src/semantic/analyzer.rs, src/semantic/mod.rs
+  - Commits: 220fa29, d295e0a
+  - Summary: 03-03b-SUMMARY.md
+  - Status: Complete
 
 ### Remaining Waves
 
-- [ ] Wave 2: IR & CFG Construction (03-03a)
-- [ ] Wave 3: Main Analyzer & Integration (03-03b)
+None - Semantic Phase Complete!
 
 ## Blockers
 
@@ -211,17 +216,33 @@ None
    - Entry block is always BB0, exit block is BB1
    - Makes function prologue/epilogue generation easier
 
+### Wave 3: Main Analyzer & Integration (03-03b)
+
+1. **Extract type information during scope analysis**
+   - Type annotations are syntactic information available during AST traversal
+   - Extracting during scope creation avoids a second pass over the AST
+   - Simplifies the pipeline by combining symbol creation with type assignment
+
+2. **Use TypeInterner from analyzer in module**
+   - ScopeAnalyzer creates types during symbol creation
+   - These types need to be preserved in the final module
+   - Using `std::mem::replace` allows the analyzer to continue with a fresh type_interner
+
+3. **TypeResolver accepts mutable SymbolTable**
+   - Enables future type inference and symbol type updates during type resolution
+   - Changed from `&SymbolTable` to `&mut SymbolTable`
+
 ## Issues
 
 None
 
-## Session: Wave 03-02b
+## Session: Wave 03-03b
 
 **Last session:** 2026-03-08
-**Stopped at:** Wave 1 complete, 03-02b-SUMMARY.md created
-**Duration:** 45 minutes
-**Commits:** 8c6c17b
+**Stopped at:** Wave 3 complete, 03-03b-SUMMARY.md created
+**Duration:** 30 minutes
+**Commits:** 220fa29, d295e0a
 
 ## Last Commit
 
-**8c6c17b** - feat(03-semantic-02b): implement type compatibility checking and resolution
+**d295e0a** - feat(03-semantic-03b): wire type information to symbol table
