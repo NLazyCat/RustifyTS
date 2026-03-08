@@ -98,8 +98,8 @@ pub struct AstNode {
 - [x] 03-GAP-04-PLAN.md — Function Parameter Handling (Complete - 6ddde24)
 - [x] 03-GAP-05-PLAN.md — Exception Parameter Handling (Complete - 29250d0)
 - [x] 03-GAP-06-PLAN.md — Class Type Information Extraction (Complete - a92c829)
-- [ ] 03-GAP-07-PLAN.md — Generic Type Variance Support
-- [ ] 03-GAP-08-PLAN.md — Type Resolution Error Collection
+- [x] 03-GAP-07-PLAN.md — Generic Type Variance Support (Complete - efaaf6c, c004e73)
+- [x] 03-GAP-08-PLAN.md — Type Resolution Error Collection (Complete - c77b71e)
 
 **交付物:**
 - `src/semantic/mod.rs` - 模块接口
