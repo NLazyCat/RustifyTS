@@ -21,6 +21,10 @@ pub enum SemanticError {
     /// Type resolution error
     #[error("type error: {0}")]
     TypeError(#[from] crate::semantic::types::resolver::ResolutionError),
+
+    /// Multiple type resolution errors
+    #[error("{0} type resolution error(s) occurred")]
+    MultipleTypeErrors(usize),
 }
 
 /// Main semantic analyzer that coordinates all analysis passes.
@@ -235,6 +239,15 @@ impl<'a> SemanticAnalyzer<'a> {
             module.scopes.root(),
         );
         type_resolver.visit_node(ast);
+
+        // Check for type resolution errors
+        if type_resolver.has_errors() {
+            let errors = type_resolver.take_errors();
+            let error_count = errors.len();
+            // Store errors in the module for later reporting
+            // For now, just return an error indicating the count
+            return Err(SemanticError::MultipleTypeErrors(error_count));
+        }
 
         // Pass 3: CFG construction
         // Build control flow graphs for all functions
